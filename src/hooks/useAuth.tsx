@@ -10,13 +10,11 @@ import type { User } from '../types'
 import type { Session as SupabaseSession } from '@supabase/supabase-js'
 
 interface AuthContextValue {
-  user:        User | null
-  session:     SupabaseSession | null
-  loading:     boolean
-  signInWithMagicLink: (email: string) => Promise<void>
-  signInWithPassword:  (email: string, password: string) => Promise<void>
-  signUp:      (email: string, password: string, fullName: string) => Promise<void>
-  signOut:     () => Promise<void>
+  user:             User | null
+  session:          SupabaseSession | null
+  loading:          boolean
+  signInWithGoogle: () => Promise<void>
+  signOut:          () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -34,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       else setLoading(false)
     })
 
-    // Listen for auth state changes
+    // Listen for auth state changes (handles OAuth redirect callback too)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setSession(session)
@@ -67,31 +65,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function signInWithMagicLink(email: string) {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
+  async function signInWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
       options: {
-        emailRedirectTo: window.location.origin,
+        redirectTo: window.location.origin,
       },
     })
     if (error) throw error
-  }
-
-  async function signInWithPassword(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-  }
-
-  async function signUp(email: string, password: string, fullName: string) {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: window.location.origin,
-      },
-    })
-    if (error) throw error
+    // Note: after this call the browser redirects to Google.
+    // When Google redirects back, onAuthStateChange fires and logs the user in.
   }
 
   async function signOut() {
@@ -104,9 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       session,
       loading,
-      signInWithMagicLink,
-      signInWithPassword,
-      signUp,
+      signInWithGoogle,
       signOut,
     }}>
       {children}
