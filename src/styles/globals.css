@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background-color: #f3f4f6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Hide scrollbars globally but keep scroll functionality */
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer components {
+  /* Phone shell — centres the app in a mobile frame on desktop */
+  .phone-shell {
+    @apply w-full max-w-sm mx-auto h-screen bg-white overflow-hidden flex flex-col relative;
+  }
+
+  /* Card */
+  .card {
+    @apply bg-white rounded-2xl border border-gray-100 p-4;
+  }
+
+  /* Primary button */
+  .btn-primary {
+    @apply w-full py-3.5 bg-primary-600 text-white font-semibold text-sm rounded-xl text-center cursor-pointer;
+  }
+
+  /* Secondary button */
+  .btn-secondary {
+    @apply w-full py-3 border border-gray-200 text-gray-500 font-medium text-sm rounded-xl text-center cursor-pointer;
+  }
+
+  /* Child color utilities */
+  .child-color-purple { color: #7C6EE6; }
+  .child-color-teal   { color: #26B99A; }
+  .child-color-coral  { color: #E86B5F; }
+  .child-color-amber  { color: #E8A838; }
+
+  .child-bg-purple { background-color: #EEEBfd; }
+  .child-bg-teal   { background-color: #E0F7F2; }
+  .child-bg-coral  { background-color: #FDECEB; }
+  .child-bg-amber  { background-color: #FEF3DC; }
+}

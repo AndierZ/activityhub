@@ -1,0 +1,249 @@
+import { supabase } from '../supabase'
+import type {
+  Session,
+  RecurrenceTemplate,
+  CreateSessionInput,
+  CreateRecurringSessionInput,
+  ConflictCheckResult,
+} from '../../types'
+import { addWeeks, addDays, parseISO, setHours, setMinutes } from 'date-fns'
+
+// ─── Fetching ─────────────────────────────────────────────────────────────────
+
+export async function getSessionsForWeek(
+  userId: string,
+  weekStart: Date,
+  weekEnd: Date,
+  childId?: string
+): Promise<Session[]> {
+  let q = supabase
+    .from('sessions')
+    .select(`
+      *,
+      child:children(*),
+      teacher:teachers(*)
+    `)
+    .eq('user_id', userId)
+    .gte('starts_at', weekStart.toISOString())
+    .lte('starts_at', weekEnd.toISOString())
+    .order('starts_at', { ascending: true })
+
+  if (childId) {
+    q = q.eq('child_id', childId)
+  }
+
+  const { data, error } = await q
+  if (error) throw error
+  return data
+}
+
+export async function getSessionsByTeacher(
+  userId: string,
+  teacherId: string,
+  childId: string
+): Promise<Session[]> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select(`*, child:children(*), teacher:teachers(*)`)
+    .eq('user_id', userId)
+    .eq('teacher_id', teacherId)
+    .eq('child_id', childId)
+    .order('starts_at', { ascending: false })
+
+  if (error) throw error
+  return data
+}
+
+// ─── Conflict detection ───────────────────────────────────────────────────────
+
+export async function checkConflict(
+  teacherId: string,
+  startsAt: string,
+  endsAt: string,
+  userId: string
+): Promise<ConflictCheckResult> {
+  const { data, error } = await supabase
+    .rpc('check_session_conflict', {
+      p_teacher_id: teacherId,
+      p_starts_at:  startsAt,
+      p_ends_at:    endsAt,
+      p_user_id:    userId,
+    })
+
+  if (error) throw error
+
+  const result = data?.[0]
+  return {
+    has_conflict:             result?.has_conflict ?? false,
+    conflicting_sessions_count: result?.conflicting_user_count ?? 0,
+  }
+}
+
+// ─── Creating sessions ────────────────────────────────────────────────────────
+
+export async function createOneOffSession(
+  userId: string,
+  input: CreateSessionInput
+): Promise<Session> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .insert({
+      user_id:    userId,
+      child_id:   input.child_id,
+      teacher_id: input.teacher_id,
+      starts_at:  input.starts_at,
+      ends_at:    input.ends_at,
+      price:      input.price,
+      notes:      input.notes ?? null,
+      status:     'scheduled',
+    })
+    .select(`*, child:children(*), teacher:teachers(*)`)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function createRecurringSessions(
+  userId: string,
+  input: CreateRecurringSessionInput
+): Promise<{ template: RecurrenceTemplate; sessions: Session[] }> {
+  // 1. Create the template
+  const { data: template, error: templateError } = await supabase
+    .from('recurrence_templates')
+    .insert({
+      user_id:         userId,
+      child_id:        input.child_id,
+      teacher_id:      input.teacher_id,
+      day_of_week:     input.day_of_week,
+      time_of_day:     input.time_of_day,
+      price:           input.price,
+      recurrence_rule: input.recurrence_rule,
+      start_date:      input.start_date,
+      end_date:        input.end_date,
+      notes:           input.notes ?? null,
+    })
+    .select()
+    .single()
+
+  if (templateError) throw templateError
+
+  // 2. Generate all session dates upfront
+  const sessionDates = generateSessionDates(
+    input.start_date,
+    input.end_date,
+    input.day_of_week,
+    input.time_of_day,
+    input.recurrence_rule
+  )
+
+  // 3. Build session rows
+  const sessionRows = sessionDates.map(({ startsAt, endsAt }) => ({
+    user_id:     userId,
+    child_id:    input.child_id,
+    teacher_id:  input.teacher_id,
+    template_id: template.id,
+    starts_at:   startsAt,
+    ends_at:     endsAt,
+    price:       input.price,
+    status:      'scheduled' as const,
+    notes:       input.notes ?? null,
+  }))
+
+  // 4. Insert all sessions in one batch
+  const { data: sessions, error: sessionsError } = await supabase
+    .from('sessions')
+    .insert(sessionRows)
+    .select(`*, child:children(*), teacher:teachers(*)`)
+
+  if (sessionsError) throw sessionsError
+
+  return { template, sessions }
+}
+
+// ─── Updating sessions ────────────────────────────────────────────────────────
+
+export async function completeSession(sessionId: string): Promise<Session> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .update({ status: 'completed', updated_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .select(`*, child:children(*), teacher:teachers(*)`)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function updateSessionPrice(
+  sessionId: string,
+  price: number
+): Promise<Session> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .update({ price, updated_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  const { error } = await supabase
+    .from('sessions')
+    .delete()
+    .eq('id', sessionId)
+
+  if (error) throw error
+}
+
+export async function deleteAllFutureSessionsInSeries(
+  templateId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('sessions')
+    .delete()
+    .eq('template_id', templateId)
+    .eq('status', 'scheduled')
+    .gte('starts_at', new Date().toISOString())
+
+  if (error) throw error
+}
+
+// ─── Helper: generate session dates ──────────────────────────────────────────
+
+function generateSessionDates(
+  startDate: string,
+  endDate: string,
+  dayOfWeek: number,
+  timeOfDay: string,    // 'HH:MM:SS'
+  rule: 'weekly' | 'biweekly'
+): Array<{ startsAt: string; endsAt: string }> {
+  const [hours, minutes] = timeOfDay.split(':').map(Number)
+  const end = parseISO(endDate)
+  const intervalWeeks = rule === 'weekly' ? 1 : 2
+
+  // Find the first occurrence on or after start_date that matches day_of_week
+  let current = parseISO(startDate)
+  while (current.getDay() !== dayOfWeek) {
+    current = addDays(current, 1)
+  }
+
+  const dates: Array<{ startsAt: string; endsAt: string }> = []
+
+  while (current <= end) {
+    const sessionStart = setMinutes(setHours(current, hours), minutes)
+    const sessionEnd = new Date(sessionStart.getTime() + 60 * 60 * 1000) // default 1hr
+
+    dates.push({
+      startsAt: sessionStart.toISOString(),
+      endsAt:   sessionEnd.toISOString(),
+    })
+
+    current = addWeeks(current, intervalWeeks)
+  }
+
+  return dates
+}
