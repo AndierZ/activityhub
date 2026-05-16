@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { supabase } from '../lib/supabase'
 import type { User } from '../types'
-import type { Session as SupabaseSession } from '@supabase/supabase-js'
+import type { Session as SupabaseSession, User as AuthUser } from '@supabase/supabase-js'
 
 interface AuthContextValue {
   user:             User | null
@@ -25,19 +25,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      if (session) fetchUserProfile(session.user.id)
-      else setLoading(false)
-    })
+    // Safety net: if onAuthStateChange hasn't fired within 10s, Supabase is
+    // stuck (most likely a hung token-refresh request caused by a stale or
+    // expired session). Wipe local auth state and send the user to login.
+    // 10s is generous — a normal OAuth code exchange takes < 2s, so this
+    // timer never fires during a healthy login flow.
+    let resolved = false
 
-    // Listen for auth state changes (handles OAuth redirect callback too)
+    const stallTimer = setTimeout(() => {
+      if (!resolved) {
+        Object.keys(localStorage)
+          .filter(k => k.startsWith('sb-'))
+          .forEach(k => localStorage.removeItem(k))
+        setUser(null)
+        setLoading(false)
+      }
+    }, 10_000)
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
+        resolved = true
+        clearTimeout(stallTimer)
         setSession(session)
         if (session) {
-          await fetchUserProfile(session.user.id)
+          // Unblock the app immediately using auth metadata (name + avatar
+          // come from Google OAuth — no DB roundtrip needed).
+          const u = session.user
+          setUser({
+            id:         u.id,
+            email:      u.email ?? '',
+            full_name:  u.user_metadata?.full_name ?? null,
+            avatar_url: u.user_metadata?.avatar_url ?? null,
+            created_at: u.created_at ?? new Date().toISOString(),
+            updated_at: null,
+          })
+          setLoading(false)
+          // Silently refresh from DB in the background (picks up profile
+          // edits the user may have made via the Profile page).
+          fetchUserProfile(u)
         } else {
           setUser(null)
           setLoading(false)
@@ -45,21 +70,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      clearTimeout(stallTimer)
+      subscription.unsubscribe()
+    }
   }, [])
 
-  async function fetchUserProfile(userId: string) {
+  async function fetchUserProfile(authUser: AuthUser) {
     try {
-      const { data, error } = await supabase
+      // Race the DB query against an 8s timeout so a slow/unreachable database
+      // never blocks the user indefinitely.
+      const queryPromise = supabase
         .from('users')
         .select('*')
-        .eq('id', userId)
+        .eq('id', authUser.id)
         .single()
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('profile fetch timeout')), 8_000)
+      )
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise])
       if (error) throw error
       setUser(data)
-    } catch (err) {
-      console.error('Failed to fetch user profile:', err)
+    } catch {
+      // Profile row missing, query failed, or timed out.
+      // Build a minimal user from auth data so authenticated users always
+      // enter the app — the profile can be created/synced later.
+      setUser({
+        id:         authUser.id,
+        email:      authUser.email ?? '',
+        full_name:  authUser.user_metadata?.full_name ?? null,
+        avatar_url: authUser.user_metadata?.avatar_url ?? null,
+        created_at: new Date().toISOString(),
+        updated_at: null,
+      })
     } finally {
       setLoading(false)
     }
@@ -68,13 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     })
     if (error) throw error
-    // Note: after this call the browser redirects to Google.
-    // When Google redirects back, onAuthStateChange fires and logs the user in.
   }
 
   async function signOut() {
@@ -83,13 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      session,
-      loading,
-      signInWithGoogle,
-      signOut,
-    }}>
+    <AuthContext.Provider value={{ user, session, loading, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   )

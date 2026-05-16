@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ActivityHub V1 Design Reference</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<!--
+  ACTIVITYHUB V1 DESIGN REFERENCE
+  ================================
+  Canonical UI source of truth for all React components.
+
+  DESIGN TOKENS
+  Primary/Katie: #7C6EE6  bg:#EEEBfd  badge:#DDD9FB
+  Jonny/teal:    #26B99A  bg:#E0F7F2  badge:#C8F0E8
+  Coral:         #E86B5F  bg:#FDECEB
+  Amber:         #E8A838  bg:#FEF3DC
+  Danger:        #E24B4A
+  Conflict:      bg:#FEF8EC border:#E8A838 text:#B87A10
+  Surface:       #ffffff   Surface2:#F5F5F7
+  Border:        #E8E8EC   Border2:#D8D8DC
+  Text1:         #1A1A2E   Text2:#555566   Text3:#999AAA
+
+  TYPOGRAPHY: DM Sans (400,500,600) + DM Serif Display (headings)
+  ICONS: Tabler Icons (@tabler/icons-webfont)
+
+  SELECTED DATE: border:1.5px solid #7C6EE6, NO fill, text color #7C6EE6 bold
+  CHILD DOTS: 1=solid, 2=half-split, 3-4=pie, 5+=rainbow easter egg
+  CONFLICT TEXT: "Another student also logged this time" (always — no times, no "conflict")
+  SELF-REPORT BANNER: shown in Log flow step 1
+  NAV FAB: 44px circle, bg #7C6EE6, margin-top:-14px, shadow 0 2px 10px rgba(124,110,230,0.35)
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--k:#7C6EE6;--j:#26B99A;--danger:#E24B4A;--s:#fff;--s2:#F5F5F7;--b:#E8E8EC;--b2:#D8D8DC;--t1:#1A1A2E;--t2:#555566;--t3:#999AAA;--r:14px;}
+body{background:#f0f0f5;font-family:'DM Sans',sans-serif;padding:20px;}
+h1{font-family:'DM Serif Display';font-size:26px;color:var(--t1);margin-bottom:4px;}
+.sub{font-size:13px;color:var(--t3);margin-bottom:20px;}
+.screens{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;}
+.sw{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.sl2{font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;}
+.phone{width:360px;height:720px;background:var(--s);border-radius:36px;border:.5px solid var(--b2);overflow:hidden;display:flex;flex-direction:column;position:relative;box-shadow:0 8px 32px rgba(0,0,0,0.12);}
+.sb2{padding:12px 20px 4px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.sb2 span{font-size:11px;font-weight:500;color:var(--t2);}
+.bod{flex:1;overflow-y:auto;padding-bottom:76px;}
+.bod::-webkit-scrollbar{display:none;}
+.sh{padding:6px 20px 8px;flex-shrink:0;display:flex;align-items:center;gap:10px;}
+.T{font-family:'DM Serif Display';font-size:22px;color:var(--t1);}
+.Tsm{font-size:15px;font-weight:600;color:var(--t1);}
+.back{width:32px;height:32px;border-radius:10px;border:.5px solid var(--b);display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:16px;flex-shrink:0;}
+.ico{width:32px;height:32px;border-radius:10px;border:.5px solid var(--b);display:flex;align-items:center;justify-content:center;color:var(--t2);}
+.tabs{display:flex;gap:8px;padding:0 20px 8px;flex-shrink:0;}
+.tab{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:500;border:.5px solid var(--b);color:var(--t2);}
+.tab.k.on{background:#EEEBfd;color:var(--k);border-color:var(--k);}
+.tab.j.on{background:#E0F7F2;color:var(--j);border-color:var(--j);}
+.tab.a.on{background:var(--s2);color:var(--t1);border-color:var(--b2);}
+.strip{display:flex;padding:0 14px 8px;gap:3px;flex-shrink:0;}
+.dp{flex:1;display:flex;flex-direction:column;align-items:center;padding:6px 2px;border-radius:12px;border:.5px solid transparent;}
+.dp.tod{background:var(--s2);border-color:var(--b);}
+.dp.sel{border:1.5px solid var(--k);}
+.dl{font-size:9px;color:var(--t3);font-weight:600;}
+.dp.sel .dl,.dp.sel .dn{color:var(--k);}
+.dp.sel .dn{font-weight:700;}
+.dn{font-size:14px;font-weight:600;color:var(--t1);margin-top:1px;}
+.dots{display:flex;justify-content:center;margin-top:3px;height:8px;align-items:center;}
+.seg{width:8px;height:8px;border-radius:50%;overflow:hidden;position:relative;}
+.sl{position:absolute;left:0;top:0;width:50%;height:100%;}
+.sr{position:absolute;right:0;top:0;width:50%;height:100%;}
+.sf{width:100%;height:100%;}
+.tl{padding:0 20px;}
+.ts{display:flex;gap:10px;margin-bottom:2px;}
+.tll{font-size:10px;color:var(--t3);width:30px;flex-shrink:0;padding-top:10px;font-weight:500;}
+.tline{flex:1;border-top:.5px solid var(--b);padding-top:8px;padding-bottom:10px;}
+.ab{border-radius:10px;padding:8px 10px;margin-bottom:5px;position:relative;}
+.ab.ka{background:#EEEBfd;border-left:3px solid var(--k);}
+.ab.jo{background:#E0F7F2;border-left:3px solid var(--j);}
+.ab.cf{background:#FEF8EC;border:1px solid #E8A838;border-left:3px solid #E8A838;}
+.aT{font-size:13px;font-weight:600;color:var(--t1);}
+.aM{font-size:11px;color:var(--t2);margin-top:1px;}
+.abg{position:absolute;top:7px;right:9px;font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px;}
+.bgk{background:#DDD9FB;color:var(--k);}
+.bgj{background:#C8F0E8;color:var(--j);}
+.ctag{font-size:11px;color:#B87A10;margin-top:4px;display:flex;align-items:center;gap:3px;}
+.empty{border:.5px dashed var(--b);border-radius:10px;padding:10px;font-size:12px;color:var(--t3);text-align:center;}
+.nav2{position:absolute;bottom:0;left:0;right:0;height:76px;background:var(--s);border-top:.5px solid var(--b);display:flex;align-items:flex-start;padding-top:10px;}
+.ni{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:var(--t3);font-size:10px;font-weight:500;}
+.ni i{font-size:20px;}
+.ni.on{color:var(--k);}
+.nadd{flex:1;display:flex;flex-direction:column;align-items:center;color:var(--t3);font-size:10px;font-weight:500;}
+.fab{width:44px;height:44px;background:var(--k);border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:22px;margin-top:-14px;box-shadow:0 2px 10px rgba(124,110,230,0.35);}
+.slbl{font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;padding:12px 20px 7px;}
+.tc{margin:0 20px 10px;background:var(--s);border:.5px solid var(--b);border-radius:var(--r);padding:12px;}
+.ttop{display:flex;gap:10px;align-items:center;}
+.av{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex-shrink:0;}
+.avp{background:#EEEBfd;color:var(--k);}
+.avt{background:#E0F7F2;color:var(--j);}
+.avc{background:#FDECEB;color:#C0524A;}
+.tn{font-size:14px;font-weight:600;color:var(--t1);}
+.tm{font-size:12px;color:var(--t2);margin-top:1px;}
+.chips{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;}
+.chip{font-size:11px;padding:3px 8px;border-radius:7px;font-weight:500;}
+.ck{background:#EEEBfd;color:var(--k);}
+.cj{background:#E0F7F2;color:var(--j);}
+.cok{background:#E0F7F2;color:#0F6E56;}
+.cw{background:#FEF3DC;color:#9A6A10;}
+.crow2{margin-top:8px;padding-top:8px;border-top:.5px solid var(--b);display:flex;align-items:center;justify-content:space-between;}
+.cs{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2);}
+.cs i{font-size:13px;color:var(--t3);}
+.cbg{font-size:10px;padding:2px 7px;border-radius:6px;background:var(--s2);color:var(--t3);font-weight:500;}
+.hb{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;}
+.hb i{font-size:20px;}
+.si{margin:0 20px 6px;position:relative;}
+.si input{width:100%;padding:9px 14px 9px 38px;border:.5px solid var(--b);border-radius:11px;font-size:13px;background:var(--s2);color:var(--t1);font-family:'DM Sans',sans-serif;outline:none;display:block;box-sizing:border-box;}
+.si i{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--t3);pointer-events:none;}
+.fnd{margin:3px 20px 10px;padding:10px 13px;border:.5px solid var(--b);border-radius:11px;display:flex;align-items:center;gap:8px;background:var(--s);}
+.fi{width:30px;height:30px;border-radius:9px;background:#EEEBfd;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.fh2{padding:8px 20px 6px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.ft{font-size:15px;font-weight:600;color:var(--t1);}
+.fs{font-size:11px;color:var(--t3);margin-left:auto;}
+.pb{height:2px;background:var(--s2);margin:0 20px 12px;border-radius:2px;flex-shrink:0;}
+.pf{height:100%;background:var(--k);border-radius:2px;}
+.fsec{padding:0 20px 12px;}
+.fl{font-size:11px;font-weight:600;color:var(--t2);margin-bottom:7px;text-transform:uppercase;letter-spacing:.05em;}
+.ban{margin:0 20px 10px;background:var(--s2);border:.5px solid var(--b2);border-radius:10px;padding:9px 11px;display:flex;gap:8px;align-items:flex-start;}
+.ban-t{font-size:11px;color:var(--t2);line-height:1.5;}
+.ban-t strong{color:var(--t1);}
+.chs{display:flex;gap:8px;margin-bottom:12px;}
+.chb{flex:1;padding:9px;border:.5px solid var(--b);border-radius:11px;text-align:center;}
+.chb.k.on{border-color:var(--k);background:#EEEBfd;}
+.chb.j.on{border-color:var(--j);background:#E0F7F2;}
+.cav2{width:32px;height:32px;border-radius:50%;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;}
+.cnm{font-size:12px;font-weight:600;color:var(--t1);}
+.tr{display:flex;align-items:center;gap:9px;padding:9px;border:.5px solid var(--b);border-radius:10px;margin-bottom:6px;background:var(--s);}
+.tr.on{border-color:var(--k);background:#F4F2FE;}
+.tri{flex:1;}
+.trn{font-size:13px;font-weight:600;color:var(--t1);}
+.trm{font-size:11px;color:var(--t2);margin-top:1px;}
+.tbg{font-size:10px;padding:2px 6px;border-radius:6px;font-weight:500;background:#FEF3DC;color:#9A6A10;}
+.mcH{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;}
+.mcT{font-size:13px;font-weight:600;color:var(--t1);}
+.mcN{width:24px;height:24px;border-radius:7px;border:.5px solid var(--b);display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:14px;}
+.cg{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center;margin-bottom:12px;}
+.cdn{font-size:10px;color:var(--t3);font-weight:600;padding:3px 0;}
+.cd{padding:5px 0;font-size:12px;border-radius:7px;color:var(--t1);}
+.cd.tod{font-weight:700;color:var(--k);}
+.cd.sel2{border:1.5px solid var(--k);color:var(--k);font-weight:700;}
+.cd.mt{color:var(--t3);}
+.tsel{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;}
+.tbn{padding:6px 10px;border:.5px solid var(--b);border-radius:8px;font-size:12px;font-weight:500;color:var(--t2);background:var(--s);}
+.tbn.on{background:var(--k);color:white;border-color:var(--k);}
+.tbn.tkn{background:var(--s2);color:var(--t3);border-style:dashed;}
+.tbn.con{background:#FEF8EC;color:#B87A10;border-color:#E8A838;}
+.cnote{background:#FEF8EC;border:.5px solid #E8D5A0;border-radius:9px;padding:8px 10px;font-size:11px;color:#9A6A10;display:flex;gap:6px;align-items:flex-start;margin-bottom:10px;line-height:1.4;}
+.rr{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:.5px solid var(--b);}
+.rl{font-size:13px;font-weight:500;color:var(--t1);}
+.rs{font-size:11px;color:var(--t2);}
+.tog{width:38px;height:21px;background:var(--s2);border-radius:11px;position:relative;border:.5px solid var(--b);}
+.tog.on{background:var(--k);border-color:var(--k);}
+.togk{position:absolute;top:2px;left:2px;width:15px;height:15px;background:white;border-radius:50%;}
+.tog.on .togk{left:19px;}
+.prr{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:.5px solid var(--b);gap:8px;}
+.pi-in{padding:6px 9px;border:.5px solid var(--b);border-radius:8px;font-size:13px;font-weight:500;color:var(--t1);background:var(--s);width:62px;text-align:right;font-family:'DM Sans',sans-serif;outline:none;flex-shrink:0;}
+.cc{margin:0 20px 12px;background:var(--s);border:.5px solid var(--b);border-radius:var(--r);overflow:hidden;}
+.cch{background:#EEEBfd;padding:16px;text-align:center;}
+.cca{font-size:17px;font-weight:600;color:var(--k);font-family:'DM Serif Display';}
+.ccr{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-top:.5px solid var(--b);}
+.ccr i{font-size:16px;color:var(--t3);width:18px;margin-top:1px;}
+.ccl{font-size:11px;color:var(--t2);}
+.ccv{font-size:13px;font-weight:500;color:var(--t1);}
+.ltag{display:inline-flex;align-items:center;gap:3px;font-size:10px;background:var(--s2);color:var(--t3);padding:2px 6px;border-radius:6px;border:.5px solid var(--b);margin-top:2px;}
+.bp{margin:0 20px 7px;padding:12px;background:var(--k);border-radius:12px;text-align:center;font-size:14px;font-weight:600;color:white;}
+.ph{margin:0 20px 12px;background:var(--s2);border-radius:var(--r);padding:14px;}
+.pnn{display:flex;gap:10px;margin-bottom:10px;}
+.pm{flex:1.2;background:var(--s);border-radius:10px;padding:11px;border:.5px solid var(--b);}
+.pref{flex:1;background:var(--s);border-radius:10px;padding:11px;border:.5px solid var(--b);opacity:.65;}
+.pml{font-size:10px;font-weight:600;color:var(--t2);margin-bottom:2px;text-transform:uppercase;letter-spacing:.05em;}
+.pmn{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;}
+.pmn.owe{color:#C0830A;}
+.pm2{font-size:11px;color:var(--t3);}
+.lpb{margin:0 20px 7px;padding:10px;border:.5px solid var(--k);border-radius:11px;text-align:center;font-size:13px;font-weight:600;color:var(--k);display:flex;align-items:center;justify-content:center;gap:5px;}
+.pi2{margin:0 20px 6px;background:var(--s);border:.5px solid var(--b);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:10px;}
+.pico{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.pinf{flex:1;}
+.pnm{font-size:13px;font-weight:600;color:var(--t1);}
+.pwho{font-size:11px;color:var(--t2);margin-top:1px;}
+.pamt{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;}
+.c-set{color:var(--t2);}
+.c-owe{color:#C0830A;}
+.c-crd{color:var(--j);}
+.sd{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.stH{margin:0 20px 12px;border-radius:var(--r);padding:14px;}
+.stR{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:.5px solid var(--b);}
+.stD{font-size:10px;color:var(--t3);width:34px;flex-shrink:0;padding-top:3px;}
+.stI{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.stInf{flex:1;}
+.stTit{font-size:13px;font-weight:500;color:var(--t1);}
+.stSub{font-size:11px;color:var(--t3);margin-top:1px;}
+.stA{font-size:13px;font-weight:600;text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums;}
+.stB{font-size:10px;text-align:right;margin-top:2px;font-variant-numeric:tabular-nums;}
+.mnav{display:flex;align-items:center;justify-content:space-between;padding:6px 20px 4px;flex-shrink:0;}
+.mnavb{width:26px;height:26px;border-radius:8px;border:.5px solid var(--b);display:flex;align-items:center;justify-content:center;color:var(--t2);}
+.mnavl{font-size:13px;font-weight:600;color:var(--t1);}
+.slb{margin:10px 20px 0;padding:11px;background:var(--k);border-radius:11px;text-align:center;font-size:13px;font-weight:600;color:white;flex-shrink:0;}
+.pfsec{margin:0 20px 9px;background:var(--s);border:.5px solid var(--b);border-radius:var(--r);overflow:hidden;}
+.pfrow{display:flex;align-items:center;gap:11px;padding:11px 13px;border-top:.5px solid var(--b);}
+.pfrow:first-child{border-top:none;}
+.pfrow i{font-size:17px;color:var(--t2);width:20px;}
+.pfrl{flex:1;font-size:13px;color:var(--t1);}
+.pfrv{font-size:12px;color:var(--t3);}
+.cprow{display:flex;align-items:center;gap:10px;padding:10px 13px;border-top:.5px solid var(--b);}
+.cprow:first-child{border-top:none;}
+.cpav{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
+.nrow{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-top:.5px solid var(--b);}
+.nrow:first-child{border-top:none;}
+.dhero{margin:0 20px 12px;background:var(--s2);border-radius:var(--r);padding:14px;display:flex;gap:12px;align-items:center;}
+.cbann{margin:0 20px 10px;background:#FEF8EC;border:.5px solid #E8D5A0;border-radius:10px;padding:9px 11px;display:flex;gap:7px;align-items:flex-start;}
+.cbt{font-size:12px;font-weight:600;color:#7A5510;margin-bottom:2px;}
+.cbx{font-size:11px;color:#9A6A10;line-height:1.5;}
+.sg{padding:0 20px;}
+.sday{margin-bottom:10px;}
+.sdl{font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
+.ss{display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:8px;margin-bottom:3px;font-size:12px;}
+.ss.tk{background:#F3F1FE;color:var(--k);}
+.ss.ot{background:var(--s2);color:var(--t2);}
+.ss.op{border:.5px dashed var(--b);color:var(--t3);}
+.ssd{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.ssl{flex:1;font-weight:500;}
+.ssw{font-size:10px;opacity:.75;}
+</style>
+</head>
+<body>
+<h1>ActivityHub V1 Design Reference</h1>
+<p class="sub">9 screens. Open in browser for accurate colours. Claude Code: use this as the UI source of truth for all React components — colours, spacing, typography, and component patterns are all defined here.</p>
+<div class="screens">
+
+<div class="sw"><div class="sl2">1. Calendar</div><div class="phone">
+<div class="sb2"><span>9:41</span><div style="display:flex;gap:4px"><i class="ti ti-wifi" style="font-size:13px;color:#999"></i><i class="ti ti-battery-2" style="font-size:13px;color:#999"></i></div></div>
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+<div class="sh"><div><div class="T">This week</div><div style="font-size:11px;color:var(--t3);margin-top:1px">May 10-16 2026</div></div><div class="ico" style="margin-left:auto"><i class="ti ti-user" style="font-size:15px"></i></div></div>
+<div class="tabs"><div class="tab a on">Everyone</div><div class="tab k">Katie</div><div class="tab j">Jonny</div></div>
+<div class="strip">
+<div class="dp"><span class="dl">SUN</span><span class="dn">10</span><div class="dots"><div class="seg"><div class="sf" style="background:var(--k)"></div></div></div></div>
+<div class="dp"><span class="dl">MON</span><span class="dn">11</span><div class="dots"><div class="seg"><div class="sf" style="background:var(--k)"></div></div></div></div>
+<div class="dp"><span class="dl">TUE</span><span class="dn">12</span><div class="dots"><div class="seg"><div class="sf" style="background:var(--j)"></div></div></div></div>
+<div class="dp tod sel"><span class="dl">WED</span><span class="dn">13</span><div class="dots"><div class="seg"><div class="sl" style="background:var(--k)"></div><div class="sr" style="background:var(--j)"></div></div></div></div>
+<div class="dp"><span class="dl">THU</span><span class="dn">14</span><div class="dots"><div class="seg"><div class="sf" style="background:var(--k)"></div></div></div></div>
+<div class="dp"><span class="dl">FRI</span><span class="dn">15</span><div class="dots"><div style="width:8px;height:8px"></div></div></div>
+<div class="dp"><span class="dl">SAT</span><span class="dn">16</span><div class="dots"><div class="seg"><div class="sl" style="background:var(--k)"></div><div class="sr" style="background:var(--j)"></div></div></div></div>
+</div>
+<div class="bod">
+<div class="tl">
+<div class="ts"><div class="tll">3 PM</div><div class="tline"><div class="ab ka"><span class="abg bgk">Katie</span><div class="aT">Piano . Mr. T</div><div class="aM">3:00-4:00 PM . Maple Studio</div></div></div></div>
+<div class="ts"><div class="tll">4 PM</div><div class="tline"><div class="ab jo"><span class="abg bgj">Jonny</span><div class="aT">Art . Ms. Lee</div><div class="aM">4:00-5:00 PM . Creative Hub</div></div></div></div>
+<div class="ts"><div class="tll">5 PM</div><div class="tline"><div class="ab ka cf"><span class="abg bgk">Katie</span><div class="aT">Vocal . Ms. Zhang</div><div class="aM">5:00-6:00 PM . Harmony Studio</div><div class="ctag"><i class="ti ti-alert-triangle" style="font-size:11px"></i> Another student also logged this time</div></div></div></div>
+<div class="ts"><div class="tll"></div><div class="tline"><div class="empty"><i class="ti ti-plus" style="font-size:13px"></i> Log an activity</div></div></div>
+</div></div></div>
+<nav class="nav2"><div class="ni on"><i class="ti ti-calendar"></i><span>Calendar</span></div><div class="ni"><i class="ti ti-users"></i><span>Teachers</span></div><div class="nadd"><div class="fab"><i class="ti ti-plus"></i></div><span style="font-size:10px;font-weight:500;color:var(--t3);margin-top:2px">Log</span></div><div class="ni"><i class="ti ti-credit-card"></i><span>Payments</span></div><div class="ni"><i class="ti ti-user"></i><span>Profile</span></div></nav>
+</div></div>
+
+<div class="sw"><div class="sl2">2. Teachers</div><div class="phone">
+<div class="sb2"><span>9:41</span><div style="display:flex;gap:4px"><i class="ti ti-wifi" style="font-size:13px;color:#999"></i><i class="ti ti-battery-2" style="font-size:13px;color:#999"></i></div></div>
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+<div class="sh"><div class="T">Teachers</div></div>
+<div class="si"><i class="ti ti-search"></i><input placeholder="Search my teachers..." type="text" readonly/></div>
+<div class="fnd"><div class="fi"><i class="ti ti-compass" style="font-size:15px;color:var(--k)"></i></div><div><div style="font-size:13px;font-weight:500;color:var(--t1)">Find a new teacher</div><div style="font-size:11px;color:var(--t3)">Browse the community directory</div></div><i class="ti ti-chevron-right" style="font-size:15px;color:var(--t3);margin-left:auto"></i></div>
+<div class="bod">
+<div class="slbl">My teachers</div>
+<div class="tc"><div class="ttop"><div class="av avp">MT</div><div style="flex:1"><div class="tn">Mr. T</div><div class="tm">Piano . Maple Studio . $80/hr</div></div><span class="cbg">Community</span><div class="hb"><i class="ti ti-heart" style="font-size:20px;color:var(--danger)"></i></div></div><div class="chips"><span class="chip ck">Katie . Mon and Thu</span><span class="chip cok">Paid up to date</span></div><div class="crow2"><div style="display:flex;gap:10px"><div class="cs"><i class="ti ti-heart"></i> 12 saved</div><div class="cs"><i class="ti ti-user"></i> 3 active</div></div><i class="ti ti-chevron-right" style="font-size:15px;color:var(--t3)"></i></div></div>
+<div class="tc"><div class="ttop"><div class="av avc">MZ</div><div style="flex:1"><div class="tn">Ms. Michelle Zhang</div><div class="tm">Vocal . Harmony Studio . $70/hr</div></div><span class="cbg">Community</span><div class="hb"><i class="ti ti-heart" style="font-size:20px;color:var(--danger)"></i></div></div><div class="chips"><span class="chip ck">Katie . Wed 5pm</span><span class="chip cw">Another student also logged this time</span></div><div class="crow2"><div style="display:flex;gap:10px"><div class="cs"><i class="ti ti-heart"></i> 27 saved</div><div class="cs"><i class="ti ti-user"></i> 5 active</div></div><i class="ti ti-chevron-right" style="font-size:15px;color:var(--t3)"></i></div></div>
+<div class="tc"><div class="ttop"><div class="av avt">MP</div><div style="flex:1"><div class="tn">Michael Park</div><div class="tm">Swimming . Aqua Centre . $65/hr</div></div><span class="cbg">Community</span><div class="hb"><i class="ti ti-heart" style="font-size:20px;color:var(--danger)"></i></div></div><div class="chips"><span class="chip cj">Jonny . Wed 4:30pm</span><span class="chip cw">$65 owed</span></div><div class="crow2"><div style="display:flex;gap:10px"><div class="cs"><i class="ti ti-heart"></i> 8 saved</div><div class="cs"><i class="ti ti-user"></i> 2 active</div></div><i class="ti ti-chevron-right" style="font-size:15px;color:var(--t3)"></i></div></div>
+</div></div>
+<nav class="nav2"><div class="ni"><i class="ti ti-calendar"></i><span>Calendar</span></div><div class="ni on"><i class="ti ti-users"></i><span>Teachers</span></div><div class="nadd"><div class="fab"><i class="ti ti-plus"></i></div><span style="font-size:10px;font-weight:500;color:var(--t3);margin-top:2px">Log</span></div><div class="ni"><i class="ti ti-credit-card"></i><span>Payments</span></div><div class="ni"><i class="ti ti-user"></i><span>Profile</span></div></nav>
+</div></div>
+
+<div class="sw"><div class="sl2">3. Teacher Detail</div><div class="phone">
+<div class="sb2"><span>9:41</span><div style="display:flex;gap:4px"><i class="ti ti-wifi" style="font-size:13px;color:#999"></i><i class="ti ti-battery-2" style="font-size:13px;color:#999"></i></div></div>
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+<div class="sh"><div class="back"><i class="ti ti-arrow-left"></i></div><div class="Tsm">Mr. T</div><div class="hb" style="margin-left:auto"><i class="ti ti-heart" style="font-size:20px;color:var(--danger)"></i></div></div>
+<div class="bod">
+<div class="dhero"><div class="av avp" style="width:48px;height:48px;font-size:14px">MT</div><div><div class="tn" style="font-size:15px">Mr. T</div><div class="tm">Piano . Maple Studio . $80/hr</div><div style="display:flex;gap:10px;margin-top:5px"><div class="cs"><i class="ti ti-heart" style="font-size:12px"></i> 12 saved</div><div class="cs"><i class="ti ti-user" style="font-size:12px"></i> 3 active</div></div></div></div>
+<div class="cbann"><i class="ti ti-users" style="font-size:15px;color:#9A6A10;flex-shrink:0;margin-top:1px"></i><div><div class="cbt">Crowdsourced schedule</div><div class="cbx">Built from what students have reported. Not confirmed by the teacher - treat as a rough guide only.</div></div></div>
+<div class="slbl" style="padding-top:4px">Reported weekly schedule</div>
+<div class="sg">
+<div class="sday"><div class="sdl">Monday</div>
+<div class="ss tk"><div class="ssd" style="background:var(--k)"></div><div class="ssl">3:00-4:00 PM</div><div class="ssw">Katie (you)</div></div>
+<div class="ss ot"><div class="ssd" style="background:var(--t3)"></div><div class="ssl">4:00-5:00 PM</div><div class="ssw">Another student</div></div>
+<div class="ss op"><div class="ssd" style="background:var(--b)"></div><div class="ssl">5:00 PM+</div><div class="ssw">No reports</div></div>
+</div>
+<div class="sday"><div class="sdl">Thursday</div>
+<div class="ss ot"><div class="ssd" style="background:var(--t3)"></div><div class="ssl">2:00-3:00 PM</div><div class="ssw">Another student</div></div>
+<div class="ss tk"><div class="ssd" style="background:var(--k)"></div><div class="ssl">3:00-4:00 PM</div><div class="ssw">Katie (you)</div></div>
+<div class="ss op"><div class="ssd" style="background:var(--b)"></div><div class="ssl">4:00 PM+</div><div class="ssw">No reports</div></div>
+</div>
+<div class="sday"><div class="sdl">Tue Wed Fri</div><div class="ss op"><div class="ssd" style="background:var(--b)"></div><div class="ssl">No sessions reported</div></div></div>
+</div></div></div>
+<nav class="nav2"><div class="ni"><i class="ti ti-calendar"></i><span>Calendar</span></div><div class="ni on"><i class="ti ti-users"></i><span>Teachers</span></div><div class="nadd"><div class="fab"><i class="ti ti-plus"></i></div><span style="font-size:10px;font-weight:500;color:var(--t3);margin-top:2px">Log</span></div><div class="ni"><i class="ti ti-credit-card"></i><span>Payments</span></div><div class="ni"><i class="ti ti-user"></i><span>Profile</span></div></nav>
+</div></div>
+
+<div class="sw"><div class="sl2">4. Log Step 1</div><div class="phone">
+<div class="sb2"><span>9:41</span><div style="display:flex;gap:4px"><i class="ti ti-wifi" style="font-size:13px;color:#999"></i><i class="ti ti-battery-2" style="font-size:13px;color:#999"></i></div></div>
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+<div class="fh2"><div class="back"><i class="ti ti-arrow-left"></i></div><div class="ft">Log an activity</div><div class="fs">Step 1 of 3</div></div>
+<div class="pb"><div class="pf" style="width:33%"></div></div>
+<div class="bod">
+<div class="ban"><i class="ti ti-pencil" style="font-size:14px;color:var(--t3);flex-shrink:0;margin-top:2px"></i><div class="ban-t"><strong>You are logging a session you have arranged.</strong> This is your personal record - it will not notify or confirm anything with the teacher.</div></div>
+<div class="fsec">
+<div class="fl">For which child?</div>
+<div class="chs"><div class="chb k on"><div class="cav2" style="background:#EEEBfd;color:var(--k)">K</div><div class="cnm">Katie</div></div><div class="chb j"><div class="cav2" style="background:#E0F7F2;color:var(--j)">J</div><div class="cnm">Jonny</div></div></div>
+<div class="fl">Which teacher?</div>
+<div class="tr on"><div class="av avp" style="width:32px;height:32px;border-radius:9px;font-size:11px">MT</div><div class="tri"><div class="trn">Mr. T</div><div class="trm">Piano</div></div><span class="tbg">3 students</span></div>
+<div class="tr"><div class="av avc" style="width:32px;height:32px;border-radius:9px;font-size:11px">MZ</div><div class="tri"><div class="trn">Ms. Michelle Zhang</div><div class="trm">Vocal</div></div><span class="tbg">5 students</span></div>
+<div class="tr"><div class="av avt" style="width:32px;height:32px;border-radius:9px;font-size:11px">MP</div><div class="tri"><div class="trn">Michael Park</div><div class="trm">Swimming</div></div><span class="tbg">2 students</span></div>
+<div class="tr" style="border-style:dashed"><div style="width:32px;height:32px;border-radius:9px;border:.5px dashed var(--b);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-plus" style="font-size:14px;color:var(--t3)"></i></div><div class="tri"><div class="trn" style="color:var(--t2)">Add new teacher</div><div class="trm">Join the community directory</div></div></div>
+</div>
+<div class="bp">Continue</div>
+</div></div>
+<nav class="nav2"><div class="ni"><i class="ti ti-calendar"></i><span>Calendar</span></div><div class="ni"><i class="ti ti-users"></i><span>Teachers</span></div><div class="nadd"><div class="fab"><i class="ti ti-plus"></i></div><span style="font-size:10px;font-weight:500;color:var(--t3);margin-top:2px">Log</span></div><div class="ni"><i class="ti ti-credit-card"></i><span>Payments</span></div><div class="ni"><i class="ti ti-user"></i><span>Profile</span></div></nav>
+</div></div>
+
+<div class="sw"><div class="sl2">5. Log Step 2</div><div class="phone">
+<div class="sb2"><span>9:41</span><div style="display:flex;gap:4px"><i class="ti ti-wifi" style="font-size:13px;color:#999"></i><i class="ti ti-battery-2" style="font-size:13px;color:#999"></i></div></div>
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+<div class="fh2"><div class="back"><i class="ti ti-arrow-left"></i></div><div class="ft">Log an activity</div><div class="fs">Step 2 of 3</div></div>
+<div class="pb"><div class="pf" style="width:66%"></div></div>
+<div class="bod">
+<div class="fsec">
+<div class="fl">When did you arrange?</div>
+<div class="mcH"><div class="mcN"><i class="ti ti-chevron-left"></i></div><div class="mcT">May 2026</div><div class="mcN"><i class="ti ti-chevron-right"></i></div></div>
+<div class="cg">
+<div class="cdn">Su</div><div class="cdn">Mo</div><div class="cdn">Tu</div><div class="cdn">We</div><div class="cdn">Th</div><div class="cdn">Fr</div><div class="cdn">Sa</div>
+<div class="cd mt">27</div><div class="cd mt">28</div><div class="cd mt">29</div><div class="cd mt">30</div><div class="cd mt">1</div><div class="cd mt">2</div><div class="cd mt">3</div>
+<div class="cd">4</div><div class="cd">5</div><div class="cd">6</div><div class="cd tod">7</div><div class="cd">8</div><div class="cd">9</div><div class="cd">10</div>
+<div class="cd">11</div><div class="cd">12</div><div class="cd">13</div><div class="cd sel2">14</div><div class="cd">15</div><div class="cd">16</div><div class="cd">17</div>
+<div class="cd">18</div><div class="cd">19</div><div class="cd">20</div><div class="cd">21</div><div class="cd">22</div><div class="cd">23</div><div class="cd">24</div>
+</div>
+<div class="fl">Time</div>
+<div class="tsel"><div class="tbn tkn">3:00pm</div><div class="tbn tkn">3:30pm</div><div class="tbn on">4:00pm</div><div class="tbn con">4:30pm <i class="ti ti-alert-triangle" style="font-size:9px"></i></div><div class="tbn">5:00pm</div><div class="tbn">5:30pm</div></div>
+<div class="cnote"><i class="ti ti-alert-triangle" style="font-size:14px;flex-shrink:0;margin-top:1px"></i><div>Another student also logged this time with Mr. T. If you have confirmed a different time directly go ahead and log it.</div></div>
+<div class="rr"><div><div class="rl">Recurring session</div><div class="rs">Repeat weekly</div></div><div class="tog on"><div class="togk"></div></div></div>
+<div class="prr"><div style="flex:1"><div class="rl">Price per session</div><div class="rs">Edit if different</div></div><input class="pi-in" type="text" value="$80" readonly/></div>
+</div>
+<div class="bp">Continue</div>
+</div></div>
+<nav class="nav2"><div class="ni"><i class="ti ti-calendar"></i><span>Calendar</span></div><div class="ni"><i class="ti ti-users"></i><span>Teachers</span></div><div class="nadd"><div class="fab"><i class="ti ti-plus"></i></div><span style="font-size:10px;font-weight:500;color:var(--t3);margin-top:2px">Log</span></div><div class="ni"><i class="ti ti-credit-card"></i><span>Payments</span></div><div class="ni"><i class="ti ti-user"></i><span>Profile</span></div></nav>
+</div></div>
+
+<div class="sw"><div class="sl2">6. Log Step 3 Confirm</div><div class="phone">
+<div class="sb2"><span>9:41</span><div style="display:flex;gap:4px"><i class="ti ti-wifi" style="font-size:13px;color:#999"></i><i class="ti ti-battery-2" style="font-size:13px;color:#999"></i></div></div>
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+<div class="fh2"><div class="back"><i class="ti ti-arrow-left"></i></div><div class="ft">Log an activity</div><div class="fs">Step 3 of 3</div></div>
+<div class="pb"><div class="pf" style="width:100%"></div></div>
+<div class="bod">
+<div class="cc"><div class="cch"><i class="ti ti-music" style="font-size:28px;color:var(--k)"></i><div class="cca" style="margin-top:6px">Piano . Mr. T</div><div style="font-size:12px;color:#8B80CC;margin-top:2px">Katie . your logged session</div></div>
+<div><div class="ccr"><i class="ti ti-calendar"></i><div><div class="ccl">Date and time</div><div class="ccv">Thu May 14 . 4:00-5:00 PM</div><div class="ltag"><i class="ti ti-pencil" style="font-size:10px"></i> Logged by you</div></div></div>
+<div class="ccr"><i class="ti ti-refresh"></i><div><div class="ccl">Recurring</div><div class="ccv">Every Thursday</div></div></div>
+<div class="ccr"><i class="ti ti-map-pin"></i><div><div class="ccl">Location</div><div class="ccv">Maple Studio</div></div></div>
+<div class="ccr"><i class="ti ti-cash"></i><div><div class="ccl">Price this session</div><div class="ccv">$80</div></div></div>
+</div></div>
+<div class="bp">Save to my calendar</div>
+</div></div>
+<nav class="nav2"><div class="ni"><i class="ti ti-calendar"></i><span>Calendar</span></div><div class="ni"><i class="ti ti-users"></i><span>Teachers</span></div><div class="nadd"><div class="fab"><i class="ti ti-plus"></i></div><span style="font-size:10px;font-weight:500;color:var(--t3);margin-top:2px">Log</span></div><div class="ni"><i class="ti ti-credit-card"></i><span>Payments</span></div><div class="ni"><i class="ti ti-user"></i><span>Profile</span></div></nav>
+</div></div>
+
+<div class="sw"><div class="sl2">7. Payments</div><div class="phone">
+<div class="sb2"><span>9:41</span><div style="display:flex;gap:4px"><i class="ti ti-wifi" style="font-size:13px;color:#999"></i><i class="ti ti-battery-2" style="font-size:13px;color:#999"></i></div></div>
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+<div class="sh"><div class="T">Payments</div></div>
+<div class="bod">
+<div class="ph"><div class="pnn"><div class="pm"><div class="pml">Balance</div><div class="pmn owe">$65</div><div class="pm2" style="margin-top:3px">you owe . 1 teacher</div></div><div class="pref"><div style="font-size:10px;color:var(--t3);margin-bottom:2px;text-transform:uppercase;letter-spacing:.05em">Paid this month</div><div style="font-size:17px;font-weight:500;color:var(--t2);font-variant-numeric:tabular-nums">$460</div><div class="pm2" style="margin-top:3px">May 2026</div></div></div><div style="height:3px;background:var(--b);border-radius:3px;overflow:hidden"><div style="height:100%;width:88%;background:var(--j);border-radius:3px"></div></div><div style="display:flex;justify-content:space-between;margin-top:5px"><div class="pm2">$460 paid</div><div class="pm2" style="color:#C0830A">$65 outstanding</div></div></div>
+<div class="lpb"><i class="ti ti-plus" style="font-size:15px"></i>Log a payment</div>
+<div class="slbl">May 2026</div>
+<div class="pi2"><div class="pico" style="background:#EEEBfd"><i class="ti ti-music" style="color:var(--k)"></i></div><div class="pinf"><div class="pnm">Piano . Mr. T</div><div class="pwho">Katie . 4 sessions</div></div><div style="text-align:right"><div class="pamt c-set">$0</div><div style="font-size:10px;color:var(--t3)">Settled</div></div><div class="sd" style="background:var(--j)"></div><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3)"></i></div>
+<div class="pi2"><div class="pico" style="background:#E0F7F2"><i class="ti ti-swimming" style="color:var(--j)"></i></div><div class="pinf"><div class="pnm">Swimming . Michael Park</div><div class="pwho">Jonny . 1 session</div></div><div style="text-align:right"><div class="pamt c-owe">$65</div><div style="font-size:10px;color:#C0830A">You owe</div></div><div class="sd" style="background:#E8A838"></div><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3)"></i></div>
+<div class="pi2"><div class="pico" style="background:#FDECEB"><i class="ti ti-microphone" style="color:#C0524A"></i></div><div class="pinf"><div class="pnm">Vocal . Ms. Zhang</div><div class="pwho">Katie . 2 sessions</div></div><div style="text-align:right"><div class="pamt c-crd">$60 credit</div><div style="font-size:10px;color:var(--j)">In credit</div></div><div class="sd" style="background:var(--j)"></div><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3)"></i></div>
+</div></div>
+<nav class="nav2"><div class="ni"><i class="ti ti-calendar"></i><span>Calendar</span></div><div class="ni"><i class="ti ti-users"></i><span>Teachers</span></div><div class="nadd"><div class="fab"><i class="ti ti-plus"></i></div><span style="font-size:10px;font-weight:500;color:var(--t3);margin-top:2px">Log</span></div><div class="ni on"><i class="ti ti-credit-card"></i><span>Payments</span></div><div class="ni"><i class="ti ti-user"></i><span>Profile</span></div></nav>
+</div></div>
+
+<div class="sw"><div class="sl2">8. Statement</div><div class="phone">
+<div class="sb2"><span>9:41</span><div style="display:flex;gap:4px"><i class="ti ti-wifi" style="font-size:13px;color:#999"></i><i class="ti ti-battery-2" style="font-size:13px;color:#999"></i></div></div>
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+<div class="sh"><div class="back"><i class="ti ti-arrow-left"></i></div><div class="Tsm">Michael Park</div></div>
+<div class="mnav"><div class="mnavb"><i class="ti ti-chevron-left"></i></div><div class="mnavl">May 2026</div><div class="mnavb"><i class="ti ti-chevron-right"></i></div></div>
+<div class="bod" style="padding-bottom:90px">
+<div class="stH" style="background:#E0F7F2"><div style="display:flex;align-items:center;gap:10px;margin-bottom:11px"><div class="av" style="background:white;color:var(--j);width:36px;height:36px;border-radius:9px"><i class="ti ti-swimming"></i></div><div><div style="font-size:14px;font-weight:600;color:var(--j)">Swimming . Michael Park</div><div style="font-size:11px;color:var(--j);opacity:.7">Jonny . May 2026</div></div></div><div style="display:flex;gap:9px"><div style="flex:1;background:white;border-radius:9px;padding:10px;border:.5px solid rgba(0,0,0,0.06)"><div style="font-size:10px;color:var(--j);opacity:.7;margin-bottom:2px;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Opening</div><div style="font-size:18px;font-weight:600;color:var(--j)">$0.00</div></div><div style="flex:1;background:white;border-radius:9px;padding:10px;border:.5px solid rgba(0,0,0,0.06)"><div style="font-size:10px;color:var(--j);opacity:.7;margin-bottom:2px;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Closing</div><div style="font-size:18px;font-weight:600;color:#C0830A">$65.00</div><div style="font-size:10px;color:#C0830A;margin-top:1px">You owe</div></div></div></div>
+<div style="margin:0 20px"><div class="stR"><div class="stD">May 7</div><div class="stI" style="background:var(--s2)"><i class="ti ti-calendar-event" style="font-size:13px;color:var(--t2)"></i></div><div class="stInf"><div class="stTit">Swimming session . 1 hr</div><div class="stSub">Wed 4:30-5:30pm</div></div><div><div class="stA" style="color:var(--t1)">+$65.00</div><div class="stB" style="color:#C0830A">$65.00 owed</div></div></div></div>
+</div>
+<div class="slb">Log a payment</div>
+</div>
+<nav class="nav2"><div class="ni"><i class="ti ti-calendar"></i><span>Calendar</span></div><div class="ni"><i class="ti ti-users"></i><span>Teachers</span></div><div class="nadd"><div class="fab"><i class="ti ti-plus"></i></div><span style="font-size:10px;font-weight:500;color:var(--t3);margin-top:2px">Log</span></div><div class="ni on"><i class="ti ti-credit-card"></i><span>Payments</span></div><div class="ni"><i class="ti ti-user"></i><span>Profile</span></div></nav>
+</div></div>
+
+<div class="sw"><div class="sl2">9. Profile</div><div class="phone">
+<div class="sb2"><span>9:41</span><div style="display:flex;gap:4px"><i class="ti ti-wifi" style="font-size:13px;color:#999"></i><i class="ti ti-battery-2" style="font-size:13px;color:#999"></i></div></div>
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+<div class="sh"><div class="back"><i class="ti ti-arrow-left"></i></div><div class="Tsm">Profile</div></div>
+<div class="bod">
+<div style="margin:0 20px 14px;background:var(--s2);border-radius:var(--r);padding:14px;display:flex;gap:13px;align-items:center"><div style="width:50px;height:50px;border-radius:50%;background:#EEEBfd;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--k);flex-shrink:0">S</div><div style="flex:1"><div style="font-size:15px;font-weight:600;color:var(--t1)">Sarah Johnson</div><div style="font-size:12px;color:var(--t2);margin-top:2px">sarah.j@email.com</div></div><div class="ico" style="margin-left:0"><i class="ti ti-pencil" style="font-size:14px"></i></div></div>
+<div class="slbl">My children</div>
+<div class="pfsec">
+<div class="cprow"><div class="cpav" style="background:#EEEBfd;color:var(--k)">K</div><div style="flex:1;font-size:13px;font-weight:500;color:var(--t1)">Katie</div><div style="font-size:11px;color:var(--t3)">Age 9</div><i class="ti ti-chevron-right" style="font-size:15px;color:var(--t3);margin-left:8px"></i></div>
+<div class="cprow"><div class="cpav" style="background:#E0F7F2;color:var(--j)">J</div><div style="flex:1;font-size:13px;font-weight:500;color:var(--t1)">Jonny</div><div style="font-size:11px;color:var(--t3)">Age 7</div><i class="ti ti-chevron-right" style="font-size:15px;color:var(--t3);margin-left:8px"></i></div>
+<div class="cprow"><div class="cpav" style="background:var(--s2);color:var(--t3);border:.5px dashed var(--b)">+</div><div style="flex:1;font-size:13px;color:var(--t2)">Add a child</div></div>
+</div>
+<div class="slbl">Account</div>
+<div class="pfsec">
+<div class="pfrow"><i class="ti ti-user"></i><div class="pfrl">Name</div><div class="pfrv">Sarah Johnson</div><i class="ti ti-chevron-right"></i></div>
+<div class="pfrow"><i class="ti ti-mail"></i><div class="pfrl">Email</div><div class="pfrv">sarah.j@email.com</div><i class="ti ti-chevron-right"></i></div>
+</div>
+<div class="slbl">Notifications</div>
+<div class="pfsec">
+<div class="nrow"><div><div style="font-size:13px;color:var(--t1)">Session reminders</div><div style="font-size:11px;color:var(--t2);margin-top:1px">1 hour before</div></div><div class="tog on"><div class="togk"></div></div></div>
+<div class="nrow"><div><div style="font-size:13px;color:var(--t1)">Payment reminders</div><div style="font-size:11px;color:var(--t2);margin-top:1px">When overdue</div></div><div class="tog on"><div class="togk"></div></div></div>
+<div class="nrow"><div><div style="font-size:13px;color:var(--t1)">Conflict alerts</div><div style="font-size:11px;color:var(--t2);margin-top:1px">Crowdsourced warnings</div></div><div class="tog"><div class="togk"></div></div></div>
+</div>
+<div style="padding:14px 20px"><div style="padding:10px;border:.5px solid #F09595;border-radius:11px;text-align:center;font-size:13px;font-weight:500;color:#A32D2D">Sign out</div></div>
+</div></div>
+<nav class="nav2"><div class="ni"><i class="ti ti-calendar"></i><span>Calendar</span></div><div class="ni"><i class="ti ti-users"></i><span>Teachers</span></div><div class="nadd"><div class="fab"><i class="ti ti-plus"></i></div><span style="font-size:10px;font-weight:500;color:var(--t3);margin-top:2px">Log</span></div><div class="ni"><i class="ti ti-credit-card"></i><span>Payments</span></div><div class="ni on"><i class="ti ti-user"></i><span>Profile</span></div></nav>
+</div></div>
+
+</div>
+</body>
+</html>

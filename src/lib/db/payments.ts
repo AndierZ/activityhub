@@ -55,36 +55,54 @@ export async function getBalance(
 }
 
 export async function getAllBalances(userId: string): Promise<TeacherBalance[]> {
-  // Get all unique child+teacher combinations for this user
-  const { data: sessions, error: sError } = await supabase
-    .from('sessions')
-    .select('child_id, teacher_id')
-    .eq('user_id', userId)
-    .eq('status', 'completed')
-
-  const { data: payments, error: pError } = await supabase
-    .from('payments')
-    .select('child_id, teacher_id')
-    .eq('user_id', userId)
+  // Batch 1: discover combos from sessions + payments in parallel
+  const [{ data: sessions, error: sError }, { data: payments, error: pError }] =
+    await Promise.all([
+      supabase.from('sessions').select('child_id, teacher_id').eq('user_id', userId).eq('status', 'completed'),
+      supabase.from('payments').select('child_id, teacher_id').eq('user_id', userId),
+    ])
 
   if (sError) throw sError
   if (pError) throw pError
 
-  // Deduplicate combinations
   const combos = new Map<string, { child_id: string; teacher_id: string }>()
   ;[...(sessions ?? []), ...(payments ?? [])].forEach(row => {
     const key = `${row.child_id}:${row.teacher_id}`
     if (!combos.has(key)) combos.set(key, row)
   })
 
-  // Fetch balance for each combination
-  const balances = await Promise.all(
-    Array.from(combos.values()).map(({ child_id, teacher_id }) =>
-      getBalance(userId, child_id, teacher_id)
-    )
-  )
+  if (combos.size === 0) return []
 
-  return balances
+  const comboList  = Array.from(combos.values())
+  const childIds   = [...new Set(comboList.map(c => c.child_id))]
+  const teacherIds = [...new Set(comboList.map(c => c.teacher_id))]
+
+  // Batch 2: all balance RPCs + bulk child/teacher fetches — all in parallel
+  const [rpcResults, { data: children }, { data: teachers }] = await Promise.all([
+    Promise.all(
+      comboList.map(({ child_id, teacher_id }) =>
+        supabase.rpc('get_balance', { p_user_id: userId, p_child_id: child_id, p_teacher_id: teacher_id })
+      )
+    ),
+    supabase.from('children').select('*').in('id', childIds),
+    supabase.from('teachers').select('*').in('id', teacherIds),
+  ])
+
+  return comboList
+    .map(({ child_id, teacher_id }, i) => {
+      const raw     = rpcResults[i].data?.[0] ?? { total_owed: 0, total_paid: 0, balance: 0 }
+      const child   = children?.find(c => c.id === child_id)
+      const teacher = teachers?.find(t => t.id === teacher_id)
+      if (!child || !teacher) return null
+      return {
+        child,
+        teacher,
+        total_owed: Number(raw.total_owed),
+        total_paid: Number(raw.total_paid),
+        balance:    Number(raw.balance),
+      }
+    })
+    .filter((b): b is TeacherBalance => b !== null)
 }
 
 // ─── Monthly statement ────────────────────────────────────────────────────────

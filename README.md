@@ -129,19 +129,57 @@ Returns all sessions + payments for a month, interleaved chronologically with ru
 
 ## Design System
 
-### Child colors
-Assigned deterministically from `display_order`, not stored:
-```typescript
-const CHILD_COLORS = ['purple', 'teal', 'coral', 'amber']
-// purple = #7C6EE6, teal = #26B99A, coral = #E86B5F, amber = #E8A838
-```
+> **Canonical UI reference:** `mockup-v1.html` — open in browser. Use it as the source of truth for all React components: colours, spacing, typography, and component patterns are all defined there.
 
-### Brand color
-Primary purple: `#7C6EE6`
+### Color tokens
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| Primary / Katie | `#7C6EE6` | Brand, Katie, selected state |
+| Katie bg | `#EEEBfd` | Activity blocks, badges |
+| Katie badge | `#DDD9FB` | Child chip background |
+| Jonny / teal | `#26B99A` | Jonny |
+| Jonny bg | `#E0F7F2` | Activity blocks, badges |
+| Jonny badge | `#C8F0E8` | Child chip background |
+| Coral | `#E86B5F` | 3rd child |
+| Coral bg | `#FDECEB` | |
+| Amber | `#E8A838` | 4th child, conflict border |
+| Amber bg | `#FEF3DC` | |
+| Danger | `#E24B4A` | Destructive actions |
+| Conflict bg | `#FEF8EC` | Conflict warning backgrounds |
+| Conflict border | `#E8A838` | |
+| Conflict text | `#B87A10` | |
+| Surface | `#ffffff` | Cards, inputs |
+| Surface2 | `#F5F5F7` | Page background, muted areas |
+| Border | `#E8E8EC` | Default borders |
+| Border2 | `#D8D8DC` | Stronger borders |
+| Text1 | `#1A1A2E` | Primary text |
+| Text2 | `#555566` | Secondary text |
+| Text3 | `#999AAA` | Muted / placeholder |
 
 ### Typography
 - Sans: DM Sans (400, 500, 600)
 - Serif: DM Serif Display (headings, logo)
+
+### Icons
+Tabler Icons — `@tabler/icons-webfont`
+
+### Spacing & shape
+- Card border radius: `14px`
+- Nav FAB: `44px` circle, `background #7C6EE6`, `margin-top: -14px`, `box-shadow: 0 2px 10px rgba(124,110,230,0.35)`
+
+### Child color assignment
+Assigned deterministically from `display_order`, not stored:
+```typescript
+const CHILD_COLORS = ['purple', 'teal', 'coral', 'amber']
+// display_order % 4 → index
+```
+
+### Key UI rules
+- **Selected date:** `border: 1.5px solid #7C6EE6`, no fill, text color `#7C6EE6` bold
+- **Child dots:** 1 child = solid dot; 2 = half-split; 3–4 = pie segments; 5+ = rainbow (easter egg)
+- **Conflict text:** Always say "Another student also logged this time" — never show times, never use the word "conflict"
+- **Self-report banner:** Shown in Log flow step 1
 
 ### Navigation
 5-tab bottom nav: Calendar · Teachers · Log (FAB) · Payments · Profile

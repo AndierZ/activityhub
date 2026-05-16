@@ -6,9 +6,9 @@
 |-------|------|--------|
 | Phase 1 | Foundation | ✅ Done |
 | Phase 2 | Data Layer + Auth | ✅ Done |
-| Phase 3 | Calendar & Sessions | ⬜ Not started |
-| Phase 4 | Teachers Directory | ⬜ Not started |
-| Phase 5 | Payments & Statements | ⬜ Not started |
+| Phase 3 | Calendar & Sessions | ✅ Done |
+| Phase 4 | Teachers Directory | ✅ Done |
+| Phase 5 | Payments & Statements | ✅ Done |
 | Phase 6 | Profile & Notifications | ⬜ Not started |
 | Phase 7 | PWA Polish | ⬜ Not started |
 
@@ -70,49 +70,44 @@ Auth flow: `signInWithGoogle()` → Google consent → redirect back → `onAuth
 
 ---
 
-## ⬜ Phase 3 — Calendar & Sessions (Next)
+## 🔄 Phase 3 — Calendar & Sessions (In progress)
 
-**CalendarPage (`/`)**
-- Status bar + week title header
-- Child filter tabs (Everyone / Katie / Jonny)
+**CalendarPage (`/`)** ✅ Built
+- Week title header with prev/next week navigation
+- Child filter tabs (Everyone + one per child, dynamic from DB)
 - Week strip — 7 day pills with segmented activity dots
   - Single child = solid dot in child color
   - Two children = half/half split dot
-  - 3-4 children = segmented pie dot
-  - 5+ = rainbow (easter egg)
+  - 3-4 children = segmented pie (conic-gradient)
+  - 5+ = rainbow easter egg
 - Day tapping updates the timeline below
-- Timeline — time-grouped activity blocks
-  - Katie = purple left border + purple bg
-  - Jonny = teal left border + teal bg
-  - Conflict = amber border + amber bg + "Another student also logged this time" warning (tappable → teacher detail)
-- Empty slot at bottom → "Log an activity"
+- Timeline — time-grouped activity blocks per selected day
+  - Child color left border + bg; child badge top-right
+  - Conflict = amber border + amber bg + "Another student also logged this time"
+  - Conflict check runs in parallel for all sessions in the week
+- Empty slot at bottom → "Log an activity" → navigates to /log
 
-**LogPage (`/log`) — 3-step flow**
+**LogPage (`/log`) ✅ Built** — 3-step flow
 
 Step 1: Child + Teacher
-- Self-report banner ("This is your personal record...")
-- Child selector (Katie / Jonny)
-- Teacher picker (saved teachers list)
-- "Add new teacher" inline form (name, subject, location, email/phone)
+- Self-report banner ("You are logging a session you have arranged...")
+- Child selector with avatar initials + active color state
+- Saved teacher list — each a card row with initials avatar + subject + student count
+- "Add new teacher" dashed row → inline form (name, subject, location) → creates teacher in community directory + saves to user_teachers
 
 Step 2: Date + Time
-- Mini calendar (month view, date selection)
-- Time slot buttons
-- Conflict warning if another student logged this time with selected teacher
-- Recurring toggle (weekly / biweekly)
-- Price per session (editable)
-- End date picker for recurring (max 180 days)
+- Mini calendar — month view with prev/next, today circle, selected filled purple
+- Time slot buttons (7 AM–9 PM, 30-min increments, horizontal scroll)
+- Conflict warning: amber note if another student has teacher at this time
+- Recurring toggle with weekly/biweekly selector
+- End date picker when recurring (max 180 days)
+- Price per session input
 
 Step 3: Confirm
-- Summary card
+- Summary card with child color header, subject + teacher + child label
+- Detail rows: date & time, recurring, location, price
 - "Logged by you" tag
-- "Save to my calendar" button
-
-Implementation notes:
-- Conflict check: call `check_session_conflict` RPC after user selects teacher + time
-- Recurring: call `createRecurringSessions()` — creates template + all session rows in one transaction
-- One-off: call `createOneOffSession()`
-- After saving: navigate to `/` and the new session should appear on the calendar
+- "Save to my calendar" → `createOneOffSession` or `createRecurringSessions` → navigate to `/`
 
 ---
 
@@ -170,16 +165,13 @@ Implementation notes:
 
 ---
 
-## ⬜ Phase 6 — Profile & Notifications
+## ✅ Phase 6 — Profile & Notifications (Done)
 
-**ProfilePage (`/profile`)**
-- User hero (avatar, name, email, edit button)
-- My children section — add/edit/remove, name + DOB + avatar
-- Account section — name, email (editable)
-- Notifications section — toggles for:
-  - Session reminders (1 hour before)
-  - Payment reminders (when overdue)
-  - Conflict alerts (crowdsourced warnings)
+**ProfilePage (`/profile`)** ✅ Built
+- User hero — initials avatar, name (inline edit), email
+- My children — list with color avatars, age, tap to expand inline edit/delete form; "Add a child" row
+- Account section — Name (tappable, editable), Email (read-only, Google auth)
+- Notifications — 3 toggles persisted to localStorage (session reminders, payment reminders, conflict alerts)
 - Sign out button
 
 ---

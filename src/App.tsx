@@ -2,10 +2,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { LoginPage }    from './pages/LoginPage'
 import { CalendarPage } from './pages/CalendarPage'
-import { TeachersPage } from './pages/TeachersPage'
-import { LogPage }      from './pages/LogPage'
-import { PaymentsPage } from './pages/PaymentsPage'
-import { ProfilePage }  from './pages/ProfilePage'
+import { TeachersPage }       from './pages/TeachersPage'
+import { TeacherDetailPage } from './pages/TeacherDetailPage'
+import { LogPage }           from './pages/LogPage'
+import { PaymentsPage }   from './pages/PaymentsPage'
+import { StatementPage }  from './pages/StatementPage'
+import { ProfilePage }    from './pages/ProfilePage'
 import { AppShell }     from './components/layout/AppShell'
 
 function ProtectedRoutes() {
@@ -16,9 +18,11 @@ function ProtectedRoutes() {
     <AppShell>
       <Routes>
         <Route path="/"         element={<CalendarPage />} />
-        <Route path="/teachers" element={<TeachersPage />} />
+        <Route path="/teachers"     element={<TeachersPage />} />
+        <Route path="/teachers/:id" element={<TeacherDetailPage />} />
         <Route path="/log"      element={<LogPage />} />
-        <Route path="/payments" element={<PaymentsPage />} />
+        <Route path="/payments"                      element={<PaymentsPage />} />
+        <Route path="/payments/:childId/:teacherId"  element={<StatementPage />} />
         <Route path="/profile"  element={<ProfilePage />} />
         <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>

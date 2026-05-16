@@ -1,8 +1,515 @@
-export function ProfilePage() {
+import { useState, useEffect } from 'react'
+import { useAuth } from '../hooks/useAuth'
+import { supabase } from '../lib/supabase'
+import { getChildren, createChild, updateChild, deleteChild } from '../lib/db/children'
+import {
+  getChildColor, CHILD_COLOR_HEX, CHILD_COLOR_BG, getInitials, getAge,
+} from '../types'
+import type { Child } from '../types'
+
+// ─── Toggle ───────────────────────────────────────────────────────────────────
+
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex-1 overflow-y-auto p-5">
-      <h1 className="font-serif text-2xl text-gray-900">ProfilePage</h1>
-      <p className="text-sm text-gray-400 mt-1">Coming in Phase 3+</p>
+    <button
+      onClick={() => onChange(!on)}
+      className="relative w-11 h-6 rounded-full flex-shrink-0"
+      style={{ background: on ? '#7C6EE6' : '#D8D8DC' }}
+    >
+      <div
+        className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200"
+        style={{ left: on ? '22px' : '2px' }}
+      />
+    </button>
+  )
+}
+
+// ─── ProfilePage ──────────────────────────────────────────────────────────────
+
+export function ProfilePage() {
+  const { user, signOut } = useAuth()
+
+  // ── Children ────────────────────────────────────────────────────────────────
+  const [children, setChildren]           = useState<Child[]>([])
+  const [editingChildId, setEditingChildId] = useState<string | null>(null) // child id or 'new'
+  const [childName, setChildName]         = useState('')
+  const [childDob, setChildDob]           = useState('')
+  const [savingChild, setSavingChild]     = useState(false)
+
+  // ── Profile editing ─────────────────────────────────────────────────────────
+  const [displayName, setDisplayName]     = useState(user?.full_name ?? '')
+  const [editingName, setEditingName]     = useState(false)
+  const [nameInput, setNameInput]         = useState('')
+  const [savingName, setSavingName]       = useState(false)
+
+  // ── Notifications (localStorage) ────────────────────────────────────────────
+  const [notifSession,  setNotifSession]  = useState(() => localStorage.getItem('notif_session')  !== 'false')
+  const [notifPayment,  setNotifPayment]  = useState(() => localStorage.getItem('notif_payment')  !== 'false')
+  const [notifConflict, setNotifConflict] = useState(() => localStorage.getItem('notif_conflict') === 'true')
+
+  // ── Sign out ─────────────────────────────────────────────────────────────────
+  const [signingOut, setSigningOut] = useState(false)
+
+  // ── Load ─────────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!user) return
+    getChildren(user.id).then(setChildren).catch(console.error)
+    setDisplayName(user.full_name ?? '')
+  }, [user])
+
+  useEffect(() => { localStorage.setItem('notif_session',  String(notifSession))  }, [notifSession])
+  useEffect(() => { localStorage.setItem('notif_payment',  String(notifPayment))  }, [notifPayment])
+  useEffect(() => { localStorage.setItem('notif_conflict', String(notifConflict)) }, [notifConflict])
+
+  // ── Child handlers ───────────────────────────────────────────────────────────
+
+  function openAddChild() {
+    setEditingChildId('new')
+    setChildName('')
+    setChildDob('')
+  }
+
+  function openEditChild(child: Child) {
+    setEditingChildId(child.id)
+    setChildName(child.name)
+    setChildDob(child.date_of_birth ?? '')
+  }
+
+  function cancelEditChild() {
+    setEditingChildId(null)
+    setChildName('')
+    setChildDob('')
+  }
+
+  async function handleSaveChild() {
+    if (!user || !childName.trim()) return
+    setSavingChild(true)
+    try {
+      if (editingChildId === 'new') {
+        const child = await createChild(user.id, {
+          name:          childName.trim(),
+          date_of_birth: childDob || undefined,
+        })
+        setChildren(prev => [...prev, child])
+      } else {
+        const updated = await updateChild(editingChildId!, {
+          name:          childName.trim(),
+          date_of_birth: childDob || undefined,
+        })
+        setChildren(prev => prev.map(c => c.id === updated.id ? updated : c))
+      }
+      cancelEditChild()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSavingChild(false)
+    }
+  }
+
+  async function handleDeleteChild(id: string) {
+    try {
+      await deleteChild(id)
+      setChildren(prev => prev.filter(c => c.id !== id))
+      if (editingChildId === id) cancelEditChild()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // ── Profile name handlers ────────────────────────────────────────────────────
+
+  function openEditName() {
+    setNameInput(displayName)
+    setEditingName(true)
+  }
+
+  async function handleSaveName() {
+    if (!user || !nameInput.trim()) return
+    setSavingName(true)
+    try {
+      await supabase
+        .from('users')
+        .update({ full_name: nameInput.trim(), updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+      setDisplayName(nameInput.trim())
+      setEditingName(false)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  // ── Sign out ──────────────────────────────────────────────────────────────────
+
+  async function handleSignOut() {
+    setSigningOut(true)
+    try {
+      await signOut()
+    } catch {
+      setSigningOut(false)
+    }
+  }
+
+  // ── Derived ───────────────────────────────────────────────────────────────────
+
+  const initials = displayName
+    ? getInitials(displayName)
+    : (user?.email?.[0] ?? '?').toUpperCase()
+
+  // ── Render ────────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+
+      {/* Header */}
+      <div
+        className="px-5 pt-4 pb-3 flex-shrink-0"
+        style={{ borderBottom: '0.5px solid #E8E8EC' }}
+      >
+        <div className="font-serif text-[22px] leading-tight" style={{ color: '#1A1A2E' }}>
+          Profile
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto pb-6">
+
+        {/* User hero */}
+        <div className="px-5 pt-4 pb-1">
+          <div
+            className="flex items-center gap-3.5 p-3.5 rounded-[14px]"
+            style={{ background: '#F5F5F7' }}
+          >
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0"
+              style={{ background: '#EEEBfd', color: '#7C6EE6' }}
+            >
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              {editingName ? (
+                <div className="flex gap-2 items-center">
+                  <input
+                    autoFocus
+                    className="flex-1 text-sm rounded-[8px] px-2.5 py-1.5 outline-none"
+                    style={{ background: '#fff', border: '0.5px solid #7C6EE6', color: '#1A1A2E' }}
+                    value={nameInput}
+                    onChange={e => setNameInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingName(false) }}
+                  />
+                  <button
+                    onClick={handleSaveName}
+                    disabled={!nameInput.trim() || savingName}
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-[8px]"
+                    style={{ background: '#7C6EE6', color: '#fff' }}
+                  >
+                    {savingName ? '…' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => setEditingName(false)}
+                    className="text-xs px-2 py-1.5 rounded-[8px]"
+                    style={{ color: '#999AAA' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="text-[15px] font-semibold truncate" style={{ color: '#1A1A2E' }}>
+                    {displayName || 'Add your name'}
+                  </div>
+                  <div className="text-[12px] mt-0.5 truncate" style={{ color: '#555566' }}>
+                    {user?.email}
+                  </div>
+                </>
+              )}
+            </div>
+            {!editingName && (
+              <button
+                onClick={openEditName}
+                className="w-8 h-8 flex items-center justify-center rounded-[9px] flex-shrink-0"
+                style={{ background: '#fff', border: '0.5px solid #E8E8EC' }}
+              >
+                <i className="ti ti-pencil" style={{ fontSize: 14, color: '#555566' }} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* My children */}
+        <div
+          className="px-5 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide"
+          style={{ color: '#999AAA' }}
+        >
+          My children
+        </div>
+        <div className="px-5">
+          <div className="rounded-[14px] overflow-hidden" style={{ border: '0.5px solid #E8E8EC' }}>
+            {children.map((child, i) => {
+              const color   = getChildColor(child.display_order)
+              const hex     = CHILD_COLOR_HEX[color]
+              const bg      = CHILD_COLOR_BG[color]
+              const editing = editingChildId === child.id
+
+              return (
+                <div
+                  key={child.id}
+                  style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none' }}
+                >
+                  {/* Child row */}
+                  <button
+                    onClick={() => editing ? cancelEditChild() : openEditChild(child)}
+                    className="w-full flex items-center gap-3 px-3.5 py-3"
+                    style={{ background: editing ? '#F5F5F7' : '#fff' }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                      style={{ background: bg, color: hex }}
+                    >
+                      {getInitials(child.name)}
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className="text-[13px] font-medium" style={{ color: '#1A1A2E' }}>
+                        {child.name}
+                      </div>
+                    </div>
+                    {child.date_of_birth && (
+                      <span className="text-[11px] mr-1" style={{ color: '#999AAA' }}>
+                        Age {getAge(child.date_of_birth)}
+                      </span>
+                    )}
+                    <i
+                      className="ti ti-chevron-right"
+                      style={{
+                        fontSize: 15,
+                        color: '#999AAA',
+                        transform: editing ? 'rotate(90deg)' : 'none',
+                        transition: 'transform 0.2s',
+                      }}
+                    />
+                  </button>
+
+                  {/* Inline edit form */}
+                  {editing && (
+                    <div
+                      className="px-3.5 pb-3.5"
+                      style={{ background: '#F5F5F7' }}
+                    >
+                      <input
+                        autoFocus
+                        className="w-full text-sm rounded-[9px] px-3 py-2 mb-2 outline-none"
+                        style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
+                        placeholder="Child's name *"
+                        value={childName}
+                        onChange={e => setChildName(e.target.value)}
+                      />
+                      <label className="text-xs mb-1 block" style={{ color: '#999AAA' }}>
+                        Date of birth (optional)
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full text-sm rounded-[9px] px-3 py-2 mb-3 outline-none"
+                        style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
+                        value={childDob}
+                        max={new Date().toISOString().split('T')[0]}
+                        onChange={e => setChildDob(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleDeleteChild(child.id)}
+                          className="py-2 px-3 rounded-[9px] text-xs font-medium"
+                          style={{ border: '0.5px solid #F09595', color: '#A32D2D' }}
+                        >
+                          Remove
+                        </button>
+                        <div className="flex-1" />
+                        <button
+                          onClick={cancelEditChild}
+                          className="py-2 px-3 rounded-[9px] text-xs"
+                          style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#555566' }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveChild}
+                          disabled={!childName.trim() || savingChild}
+                          className="py-2 px-3 rounded-[9px] text-xs font-semibold"
+                          style={{
+                            background: childName.trim() ? '#7C6EE6' : '#D8D8DC',
+                            color:      childName.trim() ? '#fff' : '#999AAA',
+                          }}
+                        >
+                          {savingChild ? '…' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Add a child row */}
+            {editingChildId === 'new' ? (
+              <div
+                className="px-3.5 pt-3 pb-3.5"
+                style={{
+                  borderTop:  children.length > 0 ? '0.5px solid #E8E8EC' : 'none',
+                  background: '#F5F5F7',
+                }}
+              >
+                <input
+                  autoFocus
+                  className="w-full text-sm rounded-[9px] px-3 py-2 mb-2 outline-none"
+                  style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
+                  placeholder="Child's name *"
+                  value={childName}
+                  onChange={e => setChildName(e.target.value)}
+                />
+                <label className="text-xs mb-1 block" style={{ color: '#999AAA' }}>
+                  Date of birth (optional)
+                </label>
+                <input
+                  type="date"
+                  className="w-full text-sm rounded-[9px] px-3 py-2 mb-3 outline-none"
+                  style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
+                  value={childDob}
+                  max={new Date().toISOString().split('T')[0]}
+                  onChange={e => setChildDob(e.target.value)}
+                />
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={cancelEditChild}
+                    className="py-2 px-3 rounded-[9px] text-xs"
+                    style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#555566' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveChild}
+                    disabled={!childName.trim() || savingChild}
+                    className="py-2 px-3 rounded-[9px] text-xs font-semibold"
+                    style={{
+                      background: childName.trim() ? '#7C6EE6' : '#D8D8DC',
+                      color:      childName.trim() ? '#fff' : '#999AAA',
+                    }}
+                  >
+                    {savingChild ? 'Saving…' : 'Add child'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={openAddChild}
+                className="w-full flex items-center gap-3 px-3.5 py-3"
+                style={{ borderTop: children.length > 0 ? '0.5px solid #E8E8EC' : 'none' }}
+              >
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-base font-medium flex-shrink-0"
+                  style={{ background: '#F5F5F7', border: '0.5px dashed #D8D8DC', color: '#999AAA' }}
+                >
+                  +
+                </div>
+                <span className="text-[13px]" style={{ color: '#555566' }}>Add a child</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Account */}
+        <div
+          className="px-5 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide"
+          style={{ color: '#999AAA' }}
+        >
+          Account
+        </div>
+        <div className="px-5">
+          <div className="rounded-[14px] overflow-hidden" style={{ border: '0.5px solid #E8E8EC' }}>
+            {/* Name */}
+            <button
+              onClick={openEditName}
+              className="w-full flex items-center gap-3 px-3.5 py-3"
+              style={{ background: '#fff' }}
+            >
+              <i className="ti ti-user" style={{ fontSize: 16, color: '#999AAA' }} />
+              <div className="text-[13px] flex-shrink-0" style={{ color: '#999AAA', width: 48 }}>Name</div>
+              <div className="flex-1 text-[13px] text-left truncate" style={{ color: '#1A1A2E' }}>
+                {displayName || <span style={{ color: '#999AAA' }}>Not set</span>}
+              </div>
+              <i className="ti ti-chevron-right" style={{ fontSize: 15, color: '#999AAA' }} />
+            </button>
+            {/* Email */}
+            <div
+              className="flex items-center gap-3 px-3.5 py-3"
+              style={{ borderTop: '0.5px solid #E8E8EC' }}
+            >
+              <i className="ti ti-mail" style={{ fontSize: 16, color: '#999AAA' }} />
+              <div className="text-[13px] flex-shrink-0" style={{ color: '#999AAA', width: 48 }}>Email</div>
+              <div className="flex-1 text-[13px] truncate" style={{ color: '#1A1A2E' }}>
+                {user?.email}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Notifications */}
+        <div
+          className="px-5 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide"
+          style={{ color: '#999AAA' }}
+        >
+          Notifications
+        </div>
+        <div className="px-5">
+          <div className="rounded-[14px] overflow-hidden" style={{ border: '0.5px solid #E8E8EC' }}>
+            {[
+              {
+                label: 'Session reminders',
+                sub:   '1 hour before',
+                value: notifSession,
+                set:   setNotifSession,
+              },
+              {
+                label: 'Payment reminders',
+                sub:   'When overdue',
+                value: notifPayment,
+                set:   setNotifPayment,
+              },
+              {
+                label: 'Conflict alerts',
+                sub:   'Crowdsourced warnings',
+                value: notifConflict,
+                set:   setNotifConflict,
+              },
+            ].map((item, i) => (
+              <div
+                key={item.label}
+                className="flex items-center px-3.5 py-3"
+                style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none', background: '#fff' }}
+              >
+                <div className="flex-1">
+                  <div className="text-[13px]" style={{ color: '#1A1A2E' }}>{item.label}</div>
+                  <div className="text-[11px] mt-0.5" style={{ color: '#555566' }}>{item.sub}</div>
+                </div>
+                <Toggle on={item.value} onChange={item.set} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Sign out */}
+        <div className="px-5 pt-4">
+          <button
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="w-full py-3 rounded-[12px] text-[13px] font-medium"
+            style={{ border: '0.5px solid #F09595', color: '#A32D2D' }}
+          >
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+        </div>
+
+      </div>
     </div>
   )
 }
