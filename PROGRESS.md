@@ -10,8 +10,8 @@
 | Phase 4 | Teachers Directory | ✅ Done |
 | Phase 5 | Payments & Statements | ✅ Done |
 | Phase 6 | Profile & Notifications | ✅ Done |
-| Phase 7 | PWA Polish | ⬜ Not started |
-| Polish | User Journey Polish | 🔄 In progress |
+| Phase 7 | PWA Polish | ✅ Done |
+| Phase 8 | V2 Teacher Features | ✅ Done |
 
 ---
 
@@ -94,6 +94,7 @@ Auth flow: `signInWithGoogle()` → Google consent → redirect back → `onAuth
   - Delete one-off session
   - For recurring sessions: delete selected session only, or selected session plus all following sessions in the series
 - Completed sessions show "Completed" state and are included in payment calculations
+- "Teacher confirmed" teal badge shown when `teacher_confirmed_at` is set
 
 **LogPage (`/log`) ✅ Built** — 3-step flow
 
@@ -111,7 +112,7 @@ Step 2: Date + Time
 - Last session defaults:
   - Fetches most recent session for selected child+teacher once
   - Prefills duration/end time from that session
-  - Prefills price from that session
+  - Prefills price from that session (resets to empty when teacher changes)
   - Does not re-query when changing quick-pick times
 - Conflict warning: amber note if another student has teacher at this time
 - Recurring toggle with weekly/biweekly selector
@@ -139,8 +140,8 @@ Step 3: Confirm
   - Heart button (save/unsave)
   - "⚠ Another student also logged this time →" conflict chip (tappable)
   - Crowd stats: "12 saved · 3 active"
-  - Community vs Verified badge
-- Tabler icon font loaded in `index.html`, fixing missing heart and back-arrow icons
+  - Community vs Claimed badge
+- Discover overlay uses `position: absolute` (contained within phone shell)
 
 **Discover overlay**
 - Search all teachers in community directory
@@ -152,6 +153,8 @@ Step 3: Confirm
 - Heart button (save/unsave) — updates `user_teachers`
 - Crowdsourced schedule — amber banner explaining it's self-reported
 - Weekly schedule grid — your slots (purple), other students (grey), no reports (dashed)
+- Trusted users (`can_manage_teachers`): inline edit form, add/delete teacher
+- Teacher invite card (unclaimed teachers with email only): generate/copy/refresh/cancel invite link
 
 ---
 
@@ -184,44 +187,13 @@ Step 3: Confirm
 
 ---
 
-## 🔄 User Journey Polish (In progress)
-
-Completed so far:
-- Loaded Tabler Icons stylesheet in `index.html`, restoring missing heart/back/nav icons
-- Fixed log mini-calendar selected-date styling to match the design reference
-- Added event detail sheet from Calendar session cards
-- Added session completion flow using the word "Complete" instead of "Confirm"
-- Separated event details, edit details, completion, and delete actions
-- Added recurring-session delete options:
-  - Delete this activity only
-  - Delete this and following activities
-- Improved log time entry:
-  - Removed dense time-slot rail
-  - Added manual Start and End time inputs
-  - Kept quick start-time chips as shortcuts only
-  - Uses explicit `ends_at` for conflict checks and saved sessions
-- Added child/teacher defaults on Log step 1
-- Added last-session defaults for duration/end time and price
-- Added visible save errors for log flow
-- Fixed project lint config to ignore `.claude/**` worktrees and set stable `tsconfigRootDir`
-
-Current verification status:
-- `npm run build` passes
-- `npm run lint` passes with 4 existing hook dependency warnings:
-  - `PaymentsPage.tsx`
-  - `StatementPage.tsx`
-  - `TeacherDetailPage.tsx`
-  - `TeachersPage.tsx`
-
----
-
 ## ✅ Phase 6 — Profile & Notifications (Done)
 
 **ProfilePage (`/profile`)** ✅ Built
 - User hero — avatar (with camera overlay upload), name (inline edit), email
 - My children — list with color avatars, age, tap to expand inline edit/delete form; camera overlay on each child avatar for photo upload; "Add a child" row
-- Shared access section:
-  - Primary user: see linked partners, revoke access, generate invite link (one active at a time)
+- Shared access section (parent accounts only):
+  - Primary user: see linked partners, revoke access, generate invite link (one active at a time, partner invitations only)
   - Linked user: see who they're connected to, disconnect
 - Account section — Name (tappable, editable), Email (read-only, Google auth)
 - Notifications — 3 toggles persisted to localStorage (session reminders, payment reminders, conflict alerts)
@@ -240,14 +212,93 @@ Current verification status:
 - One active invitation enforced: generating a new link cancels any existing pending one
 - Invite button hidden once a partner is linked (one linked user per household)
 - Revoke (primary) and disconnect (linked) both remove the `user_links` row
-- Migrations: 013 (storage), 014 (sharing tables + RPCs), 015 (invited_email — later dropped), 016 (fix missing delete policy), 017 (drop invited_email), 018 (grant anon execute on validate_invitation + recreate RPCs), 019 (fix missing user_links table + effective_user_id), 020 (fix ambiguous column in users RLS policy)
 
 ---
 
-## ⬜ Phase 7 — PWA Polish
+## ✅ Phase 7 — PWA Polish (Done)
 
-- `manifest.json` — app name, icons, `display: standalone`, theme color
-- Service worker — offline caching for app shell
-- "Add to Home Screen" prompt
-- App icons — 512×512 and 192×192
-- Test on iOS Safari + Android Chrome
+- `vite-plugin-pwa` installed and configured
+- Web app manifest auto-injected: name, short_name, `display: standalone`, `theme_color: #7C6EE6`, portrait orientation
+- Service worker (Workbox) pre-caches all app assets; `autoUpdate` on deploy
+- Tabler CDN font cached via `CacheFirst` runtime strategy (30-day TTL)
+- PNG icons generated from `favicon.svg` via `scripts/generate-icons.mjs` (sharp):
+  - `public/pwa-192x192.png` — Android/Chrome manifest icon
+  - `public/pwa-512x512.png` — Android/Chrome manifest icon + maskable
+  - `public/apple-touch-icon.png` (180×180) — iOS home screen icon
+- iOS meta tags in `index.html`: `apple-mobile-web-app-capable`, status-bar-style, title, apple-touch-icon link
+- `IOSInstallBanner` component in `AppShell`: dismissible, appears above nav bar, only on iOS Safari when not already installed, persists dismissal to localStorage
+
+---
+
+## ✅ Phase 8 — V2 Teacher Features (Done)
+
+### Teacher claiming
+
+Teachers can claim their profile and get a read-only view of their own schedule.
+
+**Invite flow (trusted users)**
+- `can_manage_teachers` boolean on `users` table gates teacher management and inviting
+- Invite card on `TeacherDetailPage`: only shown for unclaimed teachers with an email set
+- Generates a teacher-type invitation (`invitation_type = 'teacher'`, `teacher_id` FK)
+- On page open, existing pending invite is loaded from DB (survives navigation)
+- Copy / Refresh (invalidates old, creates new) / Cancel buttons
+- Invite expires after 7 days (same as partner invites)
+
+**Join flow (teacher)**
+- `JoinPage` branches on `invitation_type`:
+  - `'teacher'`: shows teacher claim screen ("Claim your schedule"), calls `accept_teacher_invitation` RPC
+  - `'partner'`: unchanged partner flow
+- `accept_teacher_invitation` RPC: validates token, checks `claimed_by IS NULL`, sets `teachers.claimed_by = auth.uid()`, marks invite used — atomic
+
+**Teacher app experience**
+- `useAuth` resolves `claimedTeacher` (null if not a teacher account)
+- `App.tsx` renders teacher route set when `claimedTeacher` is set (separate from parent routes)
+- `AppShell` shows teacher nav: Schedule / Payments / Profile
+- Parent-only sections (My children, Shared access) hidden from teacher Profile
+
+### Teacher schedule (`/my-schedule`)
+
+- Weekly calendar strip: Mon–Sun pills, week navigation, today highlight
+- Dot indicators: purple = unconfirmed sessions, teal = all confirmed
+- "N to confirm" badge in header
+- Session cards: child name, time, Confirm button (unconfirmed) or Confirmed badge + Unconfirm button (confirmed)
+- Detail sheet: full session info, Confirm / Unconfirm button
+- Optimistic UI for both confirm and unconfirm with rollback on error
+
+**Session confirmation model**
+- `teacher_confirmed_at` timestamptz added to `sessions`
+- `confirm_session(p_session_id)` SECURITY DEFINER RPC — idempotent, only writes `teacher_confirmed_at`
+- `unconfirm_session(p_session_id)` SECURITY DEFINER RPC — sets back to null
+- Parents remain source of truth for session logging and completion; teacher confirmation is additive only
+- CalendarPage shows "Teacher confirmed" teal badge when `teacher_confirmed_at` is set
+
+### Teacher payments (`/payments` for teacher accounts)
+
+- `TeacherPaymentsPage`: per-student balance list, summary hero (total outstanding + total received)
+- `TeacherStatementPage`: read-only monthly ledger per student, reuses existing `get_monthly_statement` RPC
+- `get_teacher_student_balances(p_teacher_id)` SECURITY DEFINER RPC: same balance formula as `get_all_balances` but pivoted by teacher, returns `(user_id, child_id, child_name, total_paid, balance)` — authorization guard via CROSS JOIN with auth_ok CTE
+
+### Teacher self-edit profile
+
+- Teacher profile section in `ProfilePage` (teacher accounts only)
+- Inline read/edit form: name, subject, location, email, phone
+- `update_claimed_teacher_profile` SECURITY DEFINER RPC: only updates safe fields, `claimed_by` and `verified` immutable from teacher side
+
+### Badge model
+
+- Community: unclaimed teacher (purple badge)
+- Claimed: teacher has joined and claimed their profile (green badge, `claimed_by IS NOT NULL`)
+- Verified: reserved for V3 (DB column kept, UI removed)
+
+### Migrations
+
+| File | Description |
+|------|-------------|
+| `021_admin_teachers.sql` | `can_manage_teachers` flag on users |
+| `022_rename_can_manage_teachers.sql` | Rename column |
+| `023_teacher_unique_contacts.sql` | Partial unique indexes on email/phone |
+| `024_teacher_claiming.sql` | invitation_type + teacher_id on invitations; teacher RLS policies; updated `validate_invitation` RPC; `accept_teacher_invitation` RPC |
+| `025_teacher_self_edit.sql` | `update_claimed_teacher_profile` RPC |
+| `026_session_confirmation.sql` | `teacher_confirmed_at` column; `confirm_session` RPC |
+| `027_teacher_student_balances.sql` | `get_teacher_student_balances` RPC |
+| `028_unconfirm_session.sql` | `unconfirm_session` RPC |
