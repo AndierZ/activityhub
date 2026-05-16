@@ -188,6 +188,28 @@ export async function deletePayment(paymentId: string): Promise<void> {
   if (error) throw error
 }
 
+// ─── Teacher student balances ─────────────────────────────────────────────────
+
+export interface TeacherStudentBalance {
+  user_id:    string
+  child_id:   string
+  child_name: string
+  total_paid: number
+  balance:    number
+}
+
+export async function getTeacherStudentBalances(teacherId: string): Promise<TeacherStudentBalance[]> {
+  const { data, error } = await supabase.rpc('get_teacher_student_balances', { p_teacher_id: teacherId })
+  if (error) throw error
+  return (data ?? []).map((row: TeacherStudentBalance) => ({
+    user_id:    row.user_id,
+    child_id:   row.child_id,
+    child_name: row.child_name,
+    total_paid: Number(row.total_paid),
+    balance:    Number(row.balance),
+  }))
+}
+
 export async function logPrepayment(
   userId: string,
   input: {

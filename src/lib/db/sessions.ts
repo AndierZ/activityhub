@@ -100,6 +100,13 @@ export async function getLatestSessionDefaults(
   }
 }
 
+// ─── Teacher confirmation ─────────────────────────────────────────────────────
+
+export async function confirmSession(sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc('confirm_session', { p_session_id: sessionId })
+  if (error) throw error
+}
+
 // ─── Conflict detection ───────────────────────────────────────────────────────
 
 export async function checkConflict(
@@ -325,3 +332,4 @@ function generateSessionDates(
 
   return dates
 }
+

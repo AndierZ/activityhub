@@ -10,6 +10,7 @@ import {
   getTeacherCrowdsourcedSchedule,
 } from '../lib/db/teachers'
 import type { CrowdsourcedSlot } from '../lib/db/teachers'
+import { createTeacherInvitation, getTeacherPendingInvitation, deleteInvitation } from '../lib/db/sharing'
 import type { Teacher, Session, Child } from '../types'
 import { CHILD_COLOR_HEX, CHILD_COLOR_BG, getChildColor, getInitials, CHILD_COLORS } from '../types'
 
@@ -53,7 +54,7 @@ function timeOfDayToMinutes(t: string): number {
 export function TeacherDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user, effectiveUserId } = useAuth()
+  const { user, effectiveUserId, canManageTeachers } = useAuth()
   const uid = effectiveUserId ?? user?.id ?? ''
 
   const [teacher, setTeacher] = useState<Teacher | null>(null)
@@ -62,6 +63,11 @@ export function TeacherDetailPage() {
   const [mySessions, setMySessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [savingToggle, setSavingToggle] = useState(false)
+  const [inviteLink, setInviteLink]     = useState<string | null>(null)
+  const [inviteId,   setInviteId]       = useState<string | null>(null)
+  const [generatingInvite, setGeneratingInvite] = useState(false)
+  const [cancellingInvite, setCancellingInvite] = useState(false)
+  const [inviteCopied, setInviteCopied] = useState(false)
 
   useEffect(() => {
     if (!user || !id) return
@@ -72,7 +78,7 @@ export function TeacherDetailPage() {
     if (!user || !id) return
     setLoading(true)
     try {
-      const [teacherData, savedData, slotsData, sessionsResult] = await Promise.all([
+      const [teacherData, savedData, slotsData, sessionsResult, pendingInvite] = await Promise.all([
         getTeacherById(id),
         isTeacherSaved(uid, id),
         getTeacherCrowdsourcedSchedule(id, uid),
@@ -82,11 +88,16 @@ export function TeacherDetailPage() {
           .eq('user_id', uid)
           .eq('teacher_id', id)
           .eq('status', 'scheduled'),
+        canManageTeachers ? getTeacherPendingInvitation(id) : Promise.resolve(null),
       ])
       setTeacher(teacherData)
       setSaved(savedData)
       setSlots(slotsData)
       setMySessions((sessionsResult.data ?? []) as unknown as Session[])
+      if (pendingInvite) {
+        setInviteId(pendingInvite.id)
+        setInviteLink(`${window.location.origin}/join/${pendingInvite.token}`)
+      }
     } catch (err) {
       console.error('Failed to load teacher detail:', err)
     } finally {
@@ -110,6 +121,44 @@ export function TeacherDetailPage() {
     } finally {
       setSavingToggle(false)
     }
+  }
+
+  async function handleGenerateInvite() {
+    if (!user || !teacher || generatingInvite) return
+    setGeneratingInvite(true)
+    try {
+      if (inviteId) {
+        try { await deleteInvitation(inviteId) } catch { /* stale id — continue */ }
+      }
+      const { id: newId, token } = await createTeacherInvitation(user.id, teacher.id)
+      setInviteId(newId)
+      setInviteLink(`${window.location.origin}/join/${token}`)
+    } catch (err) {
+      console.error('Failed to generate teacher invite:', err)
+    } finally {
+      setGeneratingInvite(false)
+    }
+  }
+
+  async function handleCancelInvite() {
+    if (!inviteId || cancellingInvite) return
+    setCancellingInvite(true)
+    try {
+      await deleteInvitation(inviteId)
+      setInviteId(null)
+      setInviteLink(null)
+    } catch (err) {
+      console.error('Failed to cancel invite:', err)
+    } finally {
+      setCancellingInvite(false)
+    }
+  }
+
+  async function handleCopyInvite() {
+    if (!inviteLink) return
+    await navigator.clipboard.writeText(inviteLink)
+    setInviteCopied(true)
+    setTimeout(() => setInviteCopied(false), 2000)
   }
 
   // Find matching child session for a slot (by day + approximate time)
@@ -333,7 +382,7 @@ export function TeacherDetailPage() {
               <span style={{ fontSize: 12, color: '#555566' }}>
                 <span style={{ fontWeight: 600, color: '#1A1A2E' }}>{teacher.active_students_count}</span> active
               </span>
-              {teacher.verified ? (
+              {teacher.claimed_by ? (
                 <span
                   style={{
                     fontSize: 11,
@@ -344,7 +393,7 @@ export function TeacherDetailPage() {
                     padding: '2px 8px',
                   }}
                 >
-                  Verified
+                  Claimed
                 </span>
               ) : (
                 <span
@@ -363,6 +412,147 @@ export function TeacherDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Invite to ActivityHub — trusted users only, unclaimed teachers with an email only */}
+        {canManageTeachers && !teacher.claimed_by && teacher.email && (
+          <div
+            style={{
+              background: '#fff',
+              border: '1px solid #E8E8EC',
+              borderRadius: 14,
+              padding: '14px 16px',
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+              Invite to ActivityHub
+            </div>
+            <div style={{ fontSize: 12, color: '#555566', marginBottom: 12, lineHeight: 1.5 }}>
+              Send {teacher.name} a link so they can claim this profile and see their schedule.
+            </div>
+
+            {inviteLink ? (
+              <div>
+                <div
+                  style={{
+                    background: '#F5F5F7',
+                    borderRadius: 9,
+                    padding: '8px 12px',
+                    fontSize: 12,
+                    color: '#555566',
+                    wordBreak: 'break-all',
+                    marginBottom: 8,
+                  }}
+                >
+                  {inviteLink}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={handleCopyInvite}
+                    style={{
+                      flex: 1,
+                      background: inviteCopied ? '#E0F7F2' : '#EEEBfd',
+                      color: inviteCopied ? '#26B99A' : '#7C6EE6',
+                      border: 'none',
+                      borderRadius: 9,
+                      padding: '8px 12px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <i className={`ti ${inviteCopied ? 'ti-check' : 'ti-copy'}`} style={{ fontSize: 14 }} />
+                    {inviteCopied ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button
+                    onClick={handleGenerateInvite}
+                    disabled={generatingInvite}
+                    title="Generate a new link (invalidates the current one)"
+                    style={{
+                      background: '#F5F5F7',
+                      color: '#555566',
+                      border: '0.5px solid #E8E8EC',
+                      borderRadius: 9,
+                      padding: '8px 12px',
+                      fontSize: 13,
+                      cursor: generatingInvite ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <i className="ti ti-refresh" style={{ fontSize: 14 }} />
+                  </button>
+                  <button
+                    onClick={handleCancelInvite}
+                    disabled={cancellingInvite}
+                    title="Cancel this invite link"
+                    style={{
+                      background: '#fff',
+                      color: '#A32D2D',
+                      border: '0.5px solid #F09595',
+                      borderRadius: 9,
+                      padding: '8px 12px',
+                      fontSize: 13,
+                      cursor: cancellingInvite ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <i className="ti ti-x" style={{ fontSize: 14 }} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={handleGenerateInvite}
+                disabled={generatingInvite}
+                style={{
+                  background: generatingInvite ? '#E8E8EC' : '#7C6EE6',
+                  color: generatingInvite ? '#999AAA' : '#fff',
+                  border: 'none',
+                  borderRadius: 9,
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: generatingInvite ? 'default' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <i className="ti ti-send" style={{ fontSize: 14 }} />
+                {generatingInvite ? 'Generating…' : 'Generate invite link'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Claimed badge — teacher has joined */}
+        {teacher.claimed_by && (
+          <div
+            style={{
+              background: '#E0F7F2',
+              border: '1px solid #26B99A',
+              borderRadius: 12,
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 12,
+            }}
+          >
+            <i className="ti ti-circle-check" style={{ fontSize: 18, color: '#26B99A' }} />
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#1A8A73' }}>
+              {teacher.name} has joined ActivityHub
+            </div>
+          </div>
+        )}
 
         {/* Crowdsourced banner */}
         <div

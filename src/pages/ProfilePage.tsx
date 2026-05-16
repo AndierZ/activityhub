@@ -7,6 +7,7 @@ import {
   getLinkedUsers, getMyLink, revokeLink, disconnectSelf,
   type InvitationRow, type LinkedUser,
 } from '../lib/db/sharing'
+import { updateClaimedTeacherProfile } from '../lib/db/teachers'
 import {
   getChildColor, CHILD_COLOR_HEX, CHILD_COLOR_BG, getInitials, getAge,
 } from '../types'
@@ -32,7 +33,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 // ─── ProfilePage ──────────────────────────────────────────────────────────────
 
 export function ProfilePage() {
-  const { user, effectiveUserId, refreshLinks, signOut } = useAuth()
+  const { user, effectiveUserId, claimedTeacher, refreshTeacherClaim, refreshLinks, signOut } = useAuth()
   const isLinkedUser = !!user && !!effectiveUserId && effectiveUserId !== user.id
 
   // ── Children ────────────────────────────────────────────────────────────────
@@ -71,6 +72,18 @@ export function ProfilePage() {
   const [linkCopied, setLinkCopied]         = useState(false)
   const [disconnecting, setDisconnecting]   = useState(false)
 
+  // ── Teacher profile editing ───────────────────────────────────────────────────
+  const [editingTeacher, setEditingTeacher] = useState(false)
+  const [teacherForm, setTeacherForm] = useState({
+    name: claimedTeacher?.name ?? '',
+    subject: claimedTeacher?.subject ?? '',
+    location: claimedTeacher?.location ?? '',
+    email: claimedTeacher?.email ?? '',
+    phone: claimedTeacher?.phone ?? '',
+  })
+  const [savingTeacher, setSavingTeacher] = useState(false)
+  const [teacherSaveError, setTeacherSaveError] = useState<string | null>(null)
+
   // ── Sign out ─────────────────────────────────────────────────────────────────
   const [signingOut, setSigningOut] = useState(false)
 
@@ -104,7 +117,7 @@ export function ProfilePage() {
     setGenerateError(null)
     try {
       const existing = await getMyInvitations(user.id)
-      await Promise.all(existing.map(inv => deleteInvitation(inv.id)))
+      await Promise.all(existing.filter(inv => inv.invitation_type === 'partner').map(inv => deleteInvitation(inv.id)))
 
       const { id, token } = await createInvitation(user.id)
       const url = `${window.location.origin}/join/${token}`
@@ -292,6 +305,23 @@ export function ProfilePage() {
     }
   }
 
+  // ── Teacher profile save ──────────────────────────────────────────────────────
+
+  async function handleSaveTeacherProfile() {
+    if (!teacherForm.name.trim() || !teacherForm.subject.trim()) return
+    setSavingTeacher(true)
+    setTeacherSaveError(null)
+    try {
+      await updateClaimedTeacherProfile(teacherForm)
+      await refreshTeacherClaim()
+      setEditingTeacher(false)
+    } catch (err) {
+      setTeacherSaveError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSavingTeacher(false)
+    }
+  }
+
   // ── Sign out ──────────────────────────────────────────────────────────────────
 
   async function handleSignOut() {
@@ -412,7 +442,7 @@ export function ProfilePage() {
           </div>
         </div>
 
-        {/* My children */}
+        {!claimedTeacher && <>{/* My children */}
         <div
           className="px-5 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide"
           style={{ color: '#999AAA' }}
@@ -672,8 +702,8 @@ export function ProfilePage() {
                   </div>
                 ))}
 
-                {/* Pending invitations (exclude whichever is shown in the green box) */}
-                {invitations.filter(inv => inv.id !== generatedLink?.id).map(inv => {
+                {/* Pending invitations (partner type only; exclude whichever is shown in the green box) */}
+                {invitations.filter(inv => inv.invitation_type === 'partner' && inv.id !== generatedLink?.id).map(inv => {
                   const url = `${window.location.origin}/join/${inv.token}`
                   return (
                     <div
@@ -744,7 +774,7 @@ export function ProfilePage() {
                 )}
 
                 {/* Invite button */}
-                {linkedUsers.length === 0 && invitations.length === 0 && !generatedLink && (
+                {linkedUsers.length === 0 && invitations.filter(inv => inv.invitation_type === 'partner').length === 0 && !generatedLink && (
                   <div className="px-3.5 py-3" style={{ background: '#fff' }}>
                     <button
                       onClick={handleGenerateLink}
@@ -770,6 +800,100 @@ export function ProfilePage() {
             )}
           </div>
         </div>
+        </>}
+
+        {/* Teacher profile — shown only for claimed teacher accounts */}
+        {claimedTeacher && (
+          <>
+            <div
+              className="px-5 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide"
+              style={{ color: '#999AAA' }}
+            >
+              Teacher profile
+            </div>
+            <div className="px-5">
+              <div className="rounded-[14px] overflow-hidden" style={{ border: '0.5px solid #E8E8EC' }}>
+                {editingTeacher ? (
+                  <div className="p-4" style={{ background: '#fff' }}>
+                    {([ ['name', 'Name', 'text'], ['subject', 'Subject', 'text'], ['location', 'Location', 'text'], ['email', 'Email', 'email'], ['phone', 'Phone', 'tel'] ] as const).map(([field, label, type]) => (
+                      <div key={field} className="mb-2.5">
+                        <label className="block text-[11px] font-medium mb-1" style={{ color: '#999AAA' }}>{label}</label>
+                        <input
+                          type={type}
+                          value={teacherForm[field]}
+                          onChange={e => setTeacherForm(f => ({ ...f, [field]: e.target.value }))}
+                          className="w-full rounded-[9px] px-3 py-2 text-[13px] outline-none"
+                          style={{ border: '0.5px solid #E8E8EC', background: '#F5F5F7', color: '#1A1A2E' }}
+                          placeholder={field === 'location' || field === 'email' || field === 'phone' ? 'Optional' : ''}
+                        />
+                      </div>
+                    ))}
+                    {teacherSaveError && (
+                      <div className="text-[12px] mb-2" style={{ color: '#A32D2D' }}>{teacherSaveError}</div>
+                    )}
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => { setEditingTeacher(false); setTeacherSaveError(null) }}
+                        className="py-2 px-4 rounded-[9px] text-[13px]"
+                        style={{ border: '0.5px solid #E8E8EC', color: '#555566' }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveTeacherProfile}
+                        disabled={savingTeacher || !teacherForm.name.trim() || !teacherForm.subject.trim()}
+                        className="flex-1 py-2 rounded-[9px] text-[13px] font-semibold"
+                        style={{
+                          background: !teacherForm.name.trim() || !teacherForm.subject.trim() ? '#E8E8EC' : '#7C6EE6',
+                          color: !teacherForm.name.trim() || !teacherForm.subject.trim() ? '#999AAA' : '#fff',
+                        }}
+                      >
+                        {savingTeacher ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ background: '#fff' }}>
+                    {([
+                      ['Name',     claimedTeacher.name],
+                      ['Subject',  claimedTeacher.subject],
+                      ['Location', claimedTeacher.location ?? '—'],
+                      ['Email',    claimedTeacher.email ?? '—'],
+                      ['Phone',    claimedTeacher.phone ?? '—'],
+                    ] as const).map(([label, value], i) => (
+                      <div
+                        key={label}
+                        className="flex items-center justify-between px-3.5 py-2.5"
+                        style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none' }}
+                      >
+                        <span className="text-[12px]" style={{ color: '#999AAA' }}>{label}</span>
+                        <span className="text-[13px] font-medium" style={{ color: '#1A1A2E' }}>{value}</span>
+                      </div>
+                    ))}
+                    <div className="px-3.5 py-2.5" style={{ borderTop: '0.5px solid #E8E8EC' }}>
+                      <button
+                        onClick={() => {
+                          setTeacherForm({
+                            name:     claimedTeacher.name,
+                            subject:  claimedTeacher.subject,
+                            location: claimedTeacher.location ?? '',
+                            email:    claimedTeacher.email ?? '',
+                            phone:    claimedTeacher.phone ?? '',
+                          })
+                          setEditingTeacher(true)
+                        }}
+                        className="text-[13px] font-medium"
+                        style={{ color: '#7C6EE6' }}
+                      >
+                        Edit profile
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Account */}
         <div

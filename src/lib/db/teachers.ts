@@ -165,6 +165,91 @@ export async function isTeacherSaved(
   return (count ?? 0) > 0
 }
 
+// ─── Teacher claiming ─────────────────────────────────────────────────────────
+
+export interface ClaimedTeacher {
+  id: string
+  name: string
+  subject: string
+  location: string | null
+  email: string | null
+  phone: string | null
+}
+
+export async function getClaimedTeacher(userId: string): Promise<ClaimedTeacher | null> {
+  const { data, error } = await supabase
+    .from('teachers')
+    .select('id, name, subject, location, email, phone')
+    .eq('claimed_by', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data ?? null
+}
+
+export async function updateClaimedTeacherProfile(fields: {
+  name: string
+  subject: string
+  location: string
+  email: string
+  phone: string
+}): Promise<void> {
+  const { error } = await supabase.rpc('update_claimed_teacher_profile', {
+    p_name:     fields.name,
+    p_subject:  fields.subject,
+    p_location: fields.location,
+    p_email:    fields.email,
+    p_phone:    fields.phone,
+  })
+  if (error) throw error
+}
+
+// ─── Teacher schedule queries ─────────────────────────────────────────────────
+
+export interface TeacherSessionRow {
+  id: string
+  starts_at: string
+  ends_at: string
+  price: number
+  status: string
+  teacher_confirmed_at: string | null
+  notes: string | null
+  child: { id: string; name: string }
+}
+
+export async function getTeacherWeekSessions(
+  teacherId: string,
+  weekStart: Date,
+  weekEnd: Date
+): Promise<TeacherSessionRow[]> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('id, starts_at, ends_at, price, status, teacher_confirmed_at, notes, child:children(id, name)')
+    .eq('teacher_id', teacherId)
+    .gte('starts_at', weekStart.toISOString())
+    .lt('starts_at', weekEnd.toISOString())
+    .order('starts_at', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as unknown as TeacherSessionRow[]
+}
+
+export interface TeacherPaymentRow {
+  id: string
+  date: string
+  amount: number
+  note: string | null
+  child: { id: string; name: string }
+}
+
+export async function getTeacherPaymentHistory(teacherId: string): Promise<TeacherPaymentRow[]> {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('id, date, amount, note, child:children(id, name)')
+    .eq('teacher_id', teacherId)
+    .order('date', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as unknown as TeacherPaymentRow[]
+}
+
 // ─── Crowdsourced schedule ────────────────────────────────────────────────────
 // Returns aggregated slot data for a teacher — never exposes raw user data.
 

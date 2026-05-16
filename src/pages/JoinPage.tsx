@@ -5,49 +5,51 @@ import {
   validateInvitation,
   getUserDataSummary,
   acceptInvitation,
+  acceptTeacherInvitation,
   type InvitationValidation,
 } from '../lib/db/sharing'
 
 export function JoinPage() {
   const { token } = useParams<{ token: string }>()
-  const { user, effectiveUserId, refreshLinks, signInWithGoogle } = useAuth()
+  const { user, effectiveUserId, claimedTeacher, refreshLinks, refreshTeacherClaim, signInWithGoogle } = useAuth()
   const navigate = useNavigate()
 
   const [invitation, setInvitation]   = useState<InvitationValidation | null>(null)
   const [loadingInvite, setLoadingInvite] = useState(true)
+  // Partner-only state
   const [alreadyLinked, setAlreadyLinked] = useState(false)
   const [existingData, setExistingData]   = useState<{ children_count: number; sessions_count: number } | null>(null)
   const [confirmed, setConfirmed]     = useState(false)
+  // Shared
   const [accepting, setAccepting]     = useState(false)
   const [acceptError, setAcceptError] = useState<string | null>(null)
 
-  // Validate the token (works without auth — SECURITY DEFINER RPC)
   useEffect(() => {
     if (!token) return
     validateInvitation(token)
       .then(setInvitation)
       .catch((err) => {
         console.error('validate_invitation failed:', err)
-        setInvitation({ valid: false, reason: 'not_found', inviter_name: null, inviter_email: null })
+        setInvitation({ valid: false, reason: 'not_found', inviter_name: null, inviter_email: null, invitation_type: 'partner', teacher_name: null, teacher_subject: null })
       })
       .finally(() => setLoadingInvite(false))
   }, [token])
 
-  // Once logged in + invitation is valid, run pre-acceptance checks
+  // Partner-only pre-acceptance checks
   useEffect(() => {
-    if (!user || !invitation?.valid) return
+    if (!user || !invitation?.valid || invitation.invitation_type === 'teacher') return
 
-    // Already linked somewhere?
     if (effectiveUserId !== null && effectiveUserId !== user.id) {
       setAlreadyLinked(true)
       return
     }
 
-    // How much existing data do they have?
     getUserDataSummary(user.id).then(setExistingData).catch(console.error)
   }, [user, invitation, effectiveUserId])
 
-  async function handleAccept() {
+  const isTeacherInvite = invitation?.invitation_type === 'teacher'
+
+  async function handleAcceptPartner() {
     if (!token) return
     setAccepting(true)
     setAcceptError(null)
@@ -63,8 +65,23 @@ export function JoinPage() {
     }
   }
 
+  async function handleAcceptTeacher() {
+    if (!token) return
+    setAccepting(true)
+    setAcceptError(null)
+    try {
+      await acceptTeacherInvitation(token)
+      await refreshTeacherClaim()
+      navigate('/my-schedule', { replace: true })
+    } catch (err: unknown) {
+      console.error('accept_teacher_invitation failed:', err)
+      setAcceptError((err as { message?: string })?.message ?? 'Something went wrong')
+    } finally {
+      setAccepting(false)
+    }
+  }
+
   function handleSignIn() {
-    // After OAuth, Google redirects back to this exact URL
     signInWithGoogle(`${window.location.origin}/join/${token}`)
   }
 
@@ -108,15 +125,27 @@ export function JoinPage() {
       <div className="flex flex-col items-center justify-center min-h-screen px-6">
         <div className="w-full max-w-sm">
           <div className="w-14 h-14 rounded-full flex items-center justify-center mb-5 mx-auto" style={{ background: '#EEEBfd' }}>
-            <i className="ti ti-users" style={{ fontSize: 24, color: '#7C6EE6' }} />
+            <i className={`ti ${isTeacherInvite ? 'ti-school' : 'ti-users'}`} style={{ fontSize: 24, color: '#7C6EE6' }} />
           </div>
           <div className="text-center mb-6">
             <div className="text-[20px] font-semibold mb-2" style={{ color: '#1A1A2E' }}>
-              You're invited
+              {isTeacherInvite ? 'Claim your schedule' : 'You\'re invited'}
             </div>
             <div className="text-[14px] leading-relaxed" style={{ color: '#555566' }}>
-              <span className="font-medium" style={{ color: '#1A1A2E' }}>{inviterDisplay}</span> wants to
-              share their ActivityHub account with you. Sign in to accept.
+              {isTeacherInvite ? (
+                <>
+                  <span className="font-medium" style={{ color: '#1A1A2E' }}>{inviterDisplay}</span>
+                  {' '}has invited you to view your schedule on ActivityHub.
+                  {invitation.teacher_name && (
+                    <> Sign in to claim <span className="font-medium" style={{ color: '#1A1A2E' }}>{invitation.teacher_name}</span>'s profile.</>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="font-medium" style={{ color: '#1A1A2E' }}>{inviterDisplay}</span>
+                  {' '}wants to share their ActivityHub account with you. Sign in to accept.
+                </>
+              )}
             </div>
           </div>
           <button
@@ -132,9 +161,33 @@ export function JoinPage() {
     )
   }
 
-  // ── Already linked to someone else ────────────────────────────────────────
+  // ── Teacher invite: already claimed a teacher ─────────────────────────────
 
-  if (alreadyLinked) {
+  if (isTeacherInvite && claimedTeacher) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen px-6 text-center">
+        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ background: '#FEF3DC' }}>
+          <i className="ti ti-alert-triangle" style={{ fontSize: 24, color: '#9A6A10' }} />
+        </div>
+        <div className="text-[18px] font-semibold mb-2" style={{ color: '#1A1A2E' }}>Already a teacher</div>
+        <div className="text-[14px] leading-relaxed mb-6" style={{ color: '#555566' }}>
+          Your account is already linked to <span className="font-medium" style={{ color: '#1A1A2E' }}>{claimedTeacher.name}</span>'s profile.
+          Use a different Google account to claim a second teacher profile.
+        </div>
+        <button
+          onClick={() => navigate('/my-schedule')}
+          className="py-2.5 px-5 rounded-[12px] text-[13px] font-semibold"
+          style={{ background: '#7C6EE6', color: '#fff' }}
+        >
+          Go to My Schedule
+        </button>
+      </div>
+    )
+  }
+
+  // ── Partner invite: already linked to someone else ────────────────────────
+
+  if (!isTeacherInvite && alreadyLinked) {
     return (
       <div className="flex flex-col items-center justify-center h-screen px-6 text-center">
         <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ background: '#FEF3DC' }}>
@@ -155,9 +208,9 @@ export function JoinPage() {
     )
   }
 
-  // ── Has existing data — show warning ──────────────────────────────────────
+  // ── Partner invite: has existing data warning ─────────────────────────────
 
-  const hasData = (existingData?.children_count ?? 0) > 0 || (existingData?.sessions_count ?? 0) > 0
+  const hasData = !isTeacherInvite && ((existingData?.children_count ?? 0) > 0 || (existingData?.sessions_count ?? 0) > 0)
 
   if (hasData && !confirmed) {
     const parts: string[] = []
@@ -203,6 +256,55 @@ export function JoinPage() {
 
   // ── Acceptance confirmation ────────────────────────────────────────────────
 
+  if (isTeacherInvite) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen px-6">
+        <div className="w-full max-w-sm">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mb-5 mx-auto" style={{ background: '#EEEBfd' }}>
+            <i className="ti ti-school" style={{ fontSize: 24, color: '#7C6EE6' }} />
+          </div>
+          <div className="text-center mb-6">
+            <div className="text-[20px] font-semibold mb-2" style={{ color: '#1A1A2E' }}>
+              Claim your profile
+            </div>
+            <div className="text-[14px] leading-relaxed" style={{ color: '#555566' }}>
+              You're about to claim{' '}
+              <span className="font-medium" style={{ color: '#1A1A2E' }}>
+                {invitation.teacher_name ?? 'this teacher profile'}
+              </span>
+              {invitation.teacher_subject ? ` (${invitation.teacher_subject})` : ''}.
+              {' '}Your students' families have been tracking sessions with you —
+              you'll get a read-only view of their schedule and payment history.
+            </div>
+          </div>
+
+          {acceptError && (
+            <div className="mb-4 px-3 py-2.5 rounded-[10px] text-[13px]" style={{ background: '#FDECEB', color: '#A32D2D' }}>
+              {acceptError}
+            </div>
+          )}
+
+          <button
+            onClick={handleAcceptTeacher}
+            disabled={accepting}
+            className="w-full py-3 rounded-[12px] text-[14px] font-semibold mb-3"
+            style={{ background: accepting ? '#D8D8DC' : '#7C6EE6', color: '#fff' }}
+          >
+            {accepting ? 'Claiming…' : 'Claim profile'}
+          </button>
+          <button
+            onClick={() => navigate('/')}
+            disabled={accepting}
+            className="w-full py-3 rounded-[12px] text-[14px]"
+            style={{ color: '#555566' }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen px-6">
       <div className="w-full max-w-sm">
@@ -227,7 +329,7 @@ export function JoinPage() {
         )}
 
         <button
-          onClick={handleAccept}
+          onClick={handleAcceptPartner}
           disabled={accepting}
           className="w-full py-3 rounded-[12px] text-[14px] font-semibold mb-3"
           style={{ background: accepting ? '#D8D8DC' : '#7C6EE6', color: '#fff' }}

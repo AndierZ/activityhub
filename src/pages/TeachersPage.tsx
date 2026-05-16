@@ -111,7 +111,7 @@ export function TeacherCard({
             >
               {teacher.name}
             </span>
-            {teacher.verified ? (
+            {teacher.claimed_by ? (
               <span
                 style={{
                   fontSize: 10,
@@ -123,7 +123,7 @@ export function TeacherCard({
                   flexShrink: 0,
                 }}
               >
-                Verified
+                Claimed
               </span>
             ) : (
               <span
@@ -263,9 +263,9 @@ interface DiscoverOverlayProps {
 }
 
 interface TeacherForm {
-  name: string; subject: string; location: string; email: string; phone: string; verified: boolean
+  name: string; subject: string; location: string; email: string; phone: string
 }
-const emptyForm = (): TeacherForm => ({ name: '', subject: '', location: '', email: '', phone: '', verified: false })
+const emptyForm = (): TeacherForm => ({ name: '', subject: '', location: '', email: '', phone: '' })
 
 export function DiscoverOverlay({
   savedTeacherIds,
@@ -309,7 +309,6 @@ export function DiscoverOverlay({
         location: editForm.location.trim() || null,
         email: editForm.email.trim() || null,
         phone: editForm.phone.trim() || null,
-        verified: editForm.verified,
       })
       setResults(prev => prev.map(t => t.id === editId ? updated : t))
       setEditId(null)
@@ -324,7 +323,7 @@ export function DiscoverOverlay({
   function startEdit(t: Teacher) {
     setEditId(t.id)
     setEditForm({ name: t.name, subject: t.subject, location: t.location ?? '',
-      email: t.email ?? '', phone: t.phone ?? '', verified: t.verified })
+      email: t.email ?? '', phone: t.phone ?? '' })
   }
 
   useEffect(() => {
@@ -349,7 +348,7 @@ export function DiscoverOverlay({
   return (
     <div
       style={{
-        position: 'fixed',
+        position: 'absolute',
         inset: 0,
         zIndex: 50,
         background: '#fff',
@@ -903,17 +902,6 @@ function InlineTeacherForm({ form, onChange, onSave, onCancel, saving, title, er
             background: '#fff', border: '0.5px solid #E8E8EC', color: '#1A1A2E', fontFamily: 'inherit' }}
         />
       ))}
-      <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, cursor: 'pointer' }}>
-        <div
-          onClick={() => onChange({ ...form, verified: !form.verified })}
-          style={{ width: 40, height: 24, borderRadius: 12, background: form.verified ? '#7C6EE6' : '#D8D8DC',
-            position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}
-        >
-          <div style={{ position: 'absolute', top: 4, width: 16, height: 16, borderRadius: '50%',
-            background: '#fff', left: form.verified ? 20 : 4, transition: 'left 0.2s' }} />
-        </div>
-        <span style={{ fontSize: 14, color: '#555566' }}>Verified teacher</span>
-      </label>
       {error && (
         <div style={{ fontSize: 12, color: '#E86B5F', marginBottom: 10, lineHeight: 1.4 }}>
           {error}

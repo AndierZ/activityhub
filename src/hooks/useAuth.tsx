@@ -8,6 +8,7 @@ import {
 import { supabase } from '../lib/supabase'
 import type { User } from '../types'
 import type { Session as SupabaseSession, User as AuthUser } from '@supabase/supabase-js'
+import { getClaimedTeacher, type ClaimedTeacher } from '../lib/db/teachers'
 
 interface AuthContextValue {
   user:             User | null
@@ -15,7 +16,9 @@ interface AuthContextValue {
   loading:          boolean
   canManageTeachers:          boolean
   effectiveUserId:  string | null   // primary user's id if linked, else own id
+  claimedTeacher:   ClaimedTeacher | null  // set if this user has claimed a teacher profile
   refreshLinks:     () => Promise<void>
+  refreshTeacherClaim: () => Promise<void>
   signInWithGoogle: (redirectTo?: string) => Promise<void>
   signOut:          () => Promise<void>
 }
@@ -27,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession]             = useState<SupabaseSession | null>(null)
   const [loading, setLoading]             = useState(true)
   const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null)
+  const [claimedTeacher, setClaimedTeacher]   = useState<ClaimedTeacher | null>(null)
 
   useEffect(() => {
     // Safety net: if onAuthStateChange hasn't fired within 10s, Supabase is
@@ -71,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fetchUserProfile(u)
         } else {
           setUser(null)
+          setClaimedTeacher(null)
           setLoading(false)
         }
       }
@@ -114,8 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
     } finally {
       setLoading(false)
-      // Resolve effective user id (may differ if this user accepted an invite)
-      await resolveEffectiveUserId(authUser.id)
+      // Resolve effective user id and claimed teacher in parallel
+      await Promise.all([
+        resolveEffectiveUserId(authUser.id),
+        resolveClaimedTeacher(authUser.id),
+      ])
     }
   }
 
@@ -132,9 +140,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function resolveClaimedTeacher(ownId: string) {
+    try {
+      const teacher = await getClaimedTeacher(ownId)
+      setClaimedTeacher(teacher)
+    } catch {
+      setClaimedTeacher(null)
+    }
+  }
+
   async function refreshLinks() {
     const id = (await supabase.auth.getUser()).data.user?.id
     if (id) await resolveEffectiveUserId(id)
+  }
+
+  async function refreshTeacherClaim() {
+    const id = (await supabase.auth.getUser()).data.user?.id
+    if (id) await resolveClaimedTeacher(id)
   }
 
   async function signInWithGoogle(redirectTo?: string) {
@@ -153,7 +175,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canManageTeachers = user?.can_manage_teachers ?? false
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, canManageTeachers, effectiveUserId, refreshLinks, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{
+      user, session, loading, canManageTeachers,
+      effectiveUserId, claimedTeacher,
+      refreshLinks, refreshTeacherClaim,
+      signInWithGoogle, signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   )

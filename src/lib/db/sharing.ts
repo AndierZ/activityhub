@@ -8,6 +8,7 @@ export interface InvitationRow {
   created_at: string
   accepted_at: string | null
   accepted_by_user_id: string | null
+  invitation_type: 'partner' | 'teacher'
 }
 
 export interface InvitationValidation {
@@ -15,6 +16,9 @@ export interface InvitationValidation {
   reason?: string          // 'not_found' | 'expired' | 'used' | 'valid'
   inviter_name: string | null
   inviter_email: string | null
+  invitation_type: 'partner' | 'teacher'
+  teacher_name: string | null
+  teacher_subject: string | null
 }
 
 export interface LinkedUser {
@@ -41,7 +45,7 @@ export async function createInvitation(
 export async function getMyInvitations(userId: string): Promise<InvitationRow[]> {
   const { data, error } = await supabase
     .from('invitations')
-    .select('id, token, created_at, accepted_at, accepted_by_user_id')
+    .select('id, token, created_at, accepted_at, accepted_by_user_id, invitation_type')
     .eq('inviter_user_id', userId)
     .is('accepted_at', null)        // only pending ones
     .order('created_at', { ascending: false })
@@ -50,13 +54,11 @@ export async function getMyInvitations(userId: string): Promise<InvitationRow[]>
 }
 
 export async function deleteInvitation(invitationId: string): Promise<void> {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('invitations')
     .delete()
     .eq('id', invitationId)
-    .select('id')
   if (error) throw error
-  if (!data || data.length === 0) throw new Error('Delete failed — invitation not found or permission denied')
 }
 
 // ─── Validation & acceptance (RPC — bypasses RLS) ────────────────────────────
@@ -66,10 +68,13 @@ export async function validateInvitation(token: string): Promise<InvitationValid
   if (error) throw error
   const row = data?.[0]
   return {
-    valid:         row?.valid ?? false,
-    reason:        row?.reason ?? 'not_found',
-    inviter_name:  row?.inviter_name ?? null,
-    inviter_email: row?.inviter_email ?? null,
+    valid:            row?.valid ?? false,
+    reason:           row?.reason ?? 'not_found',
+    inviter_name:     row?.inviter_name ?? null,
+    inviter_email:    row?.inviter_email ?? null,
+    invitation_type:  row?.invitation_type ?? 'partner',
+    teacher_name:     row?.teacher_name ?? null,
+    teacher_subject:  row?.teacher_subject ?? null,
   }
 }
 
@@ -156,5 +161,45 @@ export async function disconnectSelf(linkedUserId: string): Promise<void> {
     .from('user_links')
     .delete()
     .eq('linked_user_id', linkedUserId)
+  if (error) throw error
+}
+
+// ─── Teacher invitations ──────────────────────────────────────────────────────
+
+export async function getTeacherPendingInvitation(
+  teacherId: string
+): Promise<{ id: string; token: string } | null> {
+  const { data, error } = await supabase
+    .from('invitations')
+    .select('id, token')
+    .eq('teacher_id', teacherId)
+    .eq('invitation_type', 'teacher')
+    .is('accepted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data ? { id: data.id as string, token: data.token as string } : null
+}
+
+export async function createTeacherInvitation(
+  inviterUserId: string,
+  teacherId: string
+): Promise<{ id: string; token: string }> {
+  const { data, error } = await supabase
+    .from('invitations')
+    .insert({
+      inviter_user_id: inviterUserId,
+      invitation_type: 'teacher',
+      teacher_id:      teacherId,
+    })
+    .select('id, token')
+    .single()
+  if (error) throw error
+  return { id: data.id as string, token: data.token as string }
+}
+
+export async function acceptTeacherInvitation(token: string): Promise<void> {
+  const { error } = await supabase.rpc('accept_teacher_invitation', { p_token: token })
   if (error) throw error
 }

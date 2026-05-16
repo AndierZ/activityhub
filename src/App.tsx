@@ -1,20 +1,38 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth'
-import { LoginPage }    from './pages/LoginPage'
-import { CalendarPage } from './pages/CalendarPage'
-import { TeachersPage }       from './pages/TeachersPage'
-import { TeacherDetailPage } from './pages/TeacherDetailPage'
-import { LogPage }           from './pages/LogPage'
-import { PaymentsPage }   from './pages/PaymentsPage'
-import { StatementPage }  from './pages/StatementPage'
-import { ProfilePage }    from './pages/ProfilePage'
-import { AppShell }     from './components/layout/AppShell'
-import { JoinPage }     from './pages/JoinPage'
+import { LoginPage }              from './pages/LoginPage'
+import { CalendarPage }           from './pages/CalendarPage'
+import { TeachersPage }           from './pages/TeachersPage'
+import { TeacherDetailPage }      from './pages/TeacherDetailPage'
+import { LogPage }                from './pages/LogPage'
+import { PaymentsPage }           from './pages/PaymentsPage'
+import { StatementPage }          from './pages/StatementPage'
+import { ProfilePage }            from './pages/ProfilePage'
+import { MySchedulePage }         from './pages/MySchedulePage'
+import { TeacherPaymentsPage }    from './pages/TeacherPaymentsPage'
+import { TeacherStatementPage }   from './pages/TeacherStatementPage'
+import { AppShell }               from './components/layout/AppShell'
+import { JoinPage }               from './pages/JoinPage'
 
 function ProtectedRoutes() {
-  const { user, loading } = useAuth()
+  const { user, loading, claimedTeacher } = useAuth()
   if (loading) return <div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" /></div>
   if (!user) return <Navigate to="/login" replace />
+
+  if (claimedTeacher) {
+    return (
+      <AppShell>
+        <Routes>
+          <Route path="/my-schedule"               element={<MySchedulePage />} />
+          <Route path="/payments"                  element={<TeacherPaymentsPage />} />
+          <Route path="/payments/:userId/:childId" element={<TeacherStatementPage />} />
+          <Route path="/profile"                   element={<ProfilePage />} />
+          <Route path="*"                          element={<Navigate to="/my-schedule" replace />} />
+        </Routes>
+      </AppShell>
+    )
+  }
+
   return (
     <AppShell>
       <Routes>
@@ -25,7 +43,7 @@ function ProtectedRoutes() {
         <Route path="/payments"                      element={<PaymentsPage />} />
         <Route path="/payments/:childId/:teacherId"  element={<StatementPage />} />
         <Route path="/profile"  element={<ProfilePage />} />
-<Route path="*"         element={<Navigate to="/" replace />} />
+        <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>
   )

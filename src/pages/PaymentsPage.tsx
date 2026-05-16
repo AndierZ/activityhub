@@ -198,7 +198,7 @@ export function LogPaymentForm({
 // ─── PaymentsPage ─────────────────────────────────────────────────────────────
 
 export function PaymentsPage() {
-  const { user, effectiveUserId }  = useAuth()
+  const { user, effectiveUserId } = useAuth()
   const uid = effectiveUserId ?? user?.id ?? ''
   const navigate  = useNavigate()
 

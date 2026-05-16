@@ -137,6 +137,13 @@ function SessionBlock({
         </div>
       )}
 
+      {session.teacher_confirmed_at && session.status !== 'completed' && (
+        <div className="inline-flex items-center gap-1 mt-1 text-[11px]" style={{ color: '#1A8A73' }}>
+          <i className="ti ti-circle-check" style={{ fontSize: 11 }} />
+          Teacher confirmed
+        </div>
+      )}
+
       {hasConflict && (
         <div className="flex items-center gap-1 mt-1 text-[11px]" style={{ color: '#B87A10' }}>
           <i className="ti ti-alert-triangle" style={{ fontSize: 11 }} />

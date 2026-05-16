@@ -120,9 +120,7 @@ export function LogPage() {
         setDurationPresetMinutes(duration)
         setEndTime(addMinutesToTimeValue(startTimeRef.current, duration))
         setDurationSource(defaults ? 'remembered' : 'default')
-        if (defaults) {
-          setPrice(String(defaults.price))
-        }
+        setPrice(defaults ? String(defaults.price) : '')
       })
       .catch(() => {
         if (cancelled) return

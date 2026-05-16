@@ -84,6 +84,7 @@ export interface Session {
   status: SessionStatus
   title: string | null           // set when teacher_id is null; derived from teacher.subject otherwise
   notes: string | null
+  teacher_confirmed_at: string | null  // set by teacher via confirm_session RPC
   created_at: string
   updated_at: string | null
   // Joined
