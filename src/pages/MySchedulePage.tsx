@@ -71,7 +71,7 @@ function SessionCard({
           <i className="ti ti-check" style={{ fontSize: 12 }} />
           Confirm
         </button>
-      ) : !completed && (
+      ) : (
         <button
           onClick={(e) => { e.stopPropagation(); onUnconfirm(session.id) }}
           className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
@@ -99,7 +99,6 @@ function DetailSheet({
   onUnconfirm: (id: string) => void
 }) {
   const confirmed = !!session.teacher_confirmed_at
-  const completed = session.status === 'completed'
 
   return (
     <>
@@ -146,7 +145,7 @@ function DetailSheet({
           </button>
         )}
 
-        {confirmed && !completed && (
+        {confirmed && (
           <button
             onClick={() => { onUnconfirm(session.id); onClose() }}
             className="w-full py-3 rounded-[12px] text-[14px] font-semibold flex items-center justify-center gap-2 mb-3"
