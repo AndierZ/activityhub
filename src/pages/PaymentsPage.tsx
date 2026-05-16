@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, startOfMonth, addMonths } from 'date-fns'
 import { useAuth } from '../hooks/useAuth'
-import { supabase } from '../lib/supabase'
 import { getAllBalances, logPayment, logPrepayment } from '../lib/db/payments'
+import { getMonthlySessionSummary } from '../lib/db/sessions'
 import { getSavedTeachers } from '../lib/db/teachers'
 import { getChildren } from '../lib/db/children'
 import {
@@ -205,7 +205,10 @@ export function PaymentsPage() {
   const [balances,       setBalances]       = useState<BalanceSummary[]>([])
   const [children,       setChildren]       = useState<Child[]>([])
   const [savedTeachers,  setSavedTeachers]  = useState<UserTeacher[]>([])
-  const [paidThisMonth,  setPaidThisMonth]  = useState(0)
+  const [scheduledThisMonth, setScheduledThisMonth] = useState(0)
+  const [realizedThisMonth,  setRealizedThisMonth]  = useState(0)
+  const [monthByPair,        setMonthByPair]        = useState<Record<string, { scheduledAmount: number; realizedAmount: number }>>({})
+
   const [loading,        setLoading]        = useState(true)
   const [showLogForm,    setShowLogForm]    = useState(false)
 
@@ -221,24 +224,19 @@ export function PaymentsPage() {
       const monthStart = startOfMonth(new Date())
       const monthEnd   = addMonths(monthStart, 1)
 
-      const [balancesData, childrenData, teachersData, { data: monthPmts }] = await Promise.all([
+      const [balancesData, childrenData, teachersData, sessionSummary] = await Promise.all([
         getAllBalances(uid),
         getChildren(uid),
         getSavedTeachers(uid),
-        supabase
-          .from('payments')
-          .select('amount')
-          .eq('user_id', uid)
-          .gte('date', format(monthStart, 'yyyy-MM-dd'))
-          .lt('date',  format(monthEnd,   'yyyy-MM-dd')),
+        getMonthlySessionSummary(uid, monthStart, monthEnd),
       ])
 
       setBalances(balancesData)
       setChildren(childrenData)
       setSavedTeachers(teachersData)
-      setPaidThisMonth(
-        (monthPmts ?? []).reduce((sum, p) => sum + Math.abs(p.amount), 0)
-      )
+      setScheduledThisMonth(sessionSummary.scheduledAmount)
+      setRealizedThisMonth(sessionSummary.realizedAmount)
+      setMonthByPair(sessionSummary.byPair)
     } catch (err) {
       console.error(err)
     } finally {
@@ -248,13 +246,10 @@ export function PaymentsPage() {
 
   // ── Derived ──────────────────────────────────────────────────────────────────
 
-  const overallBalance = balances.reduce((s, b) => s + b.balance, 0)
-  const totalPaid      = balances.reduce((s, b) => s + b.total_paid, 0)
-  const totalOwed      = balances.reduce((s, b) => s + Math.max(b.balance, 0), 0)
-  const teachersOwed   = balances.filter(b => b.balance > 0).length
-  const progressPct    = totalPaid + totalOwed > 0
-    ? Math.round((totalPaid / (totalPaid + totalOwed)) * 100)
-    : 100
+  const overallBalance  = balances.reduce((s, b) => s + b.balance, 0)
+  const teachersOwed    = balances.filter(b => b.balance > 0).length
+  const monthTotal      = realizedThisMonth + scheduledThisMonth
+  const monthPct        = monthTotal > 0 ? (realizedThisMonth / monthTotal) * 100 : 0
 
   const balanceColor =
     overallBalance > 0  ? '#E8A838' :
@@ -281,10 +276,9 @@ export function PaymentsPage() {
       <div className="flex-1 overflow-y-auto">
 
         <>
-          {/* Balance hero — always visible; numbers hidden while loading */}
+          {/* Balance hero */}
           <div className="mx-5 mt-4 p-4 rounded-[14px]" style={{ border: '0.5px solid #E8E8EC' }}>
             <div className="flex items-start justify-between mb-3">
-              {/* Left: balance */}
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: '#999AAA' }}>
                   Balance
@@ -300,39 +294,30 @@ export function PaymentsPage() {
                   {loading ? '—' : balanceLabel}
                 </div>
               </div>
-              {/* Right: paid this month */}
-              <div className="text-right">
-                <div className="text-[10px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: '#999AAA' }}>
-                  Paid this month
-                </div>
-                {loading ? (
-                  <div className="h-5 w-14 rounded-lg mt-1 ml-auto" style={{ background: '#F5F5F7' }} />
-                ) : (
-                  <div className="text-[17px] font-medium" style={{ color: '#555566', fontVariantNumeric: 'tabular-nums' }}>
-                    {fmtAmt(paidThisMonth)}
-                  </div>
-                )}
-                <div className="text-[11px] mt-1" style={{ color: '#999AAA' }}>
-                  {format(new Date(), 'MMM yyyy')}
-                </div>
+              <div className="text-[11px]" style={{ color: '#999AAA' }}>
+                {format(new Date(), 'MMM yyyy')}
               </div>
             </div>
 
-            {/* Progress bar */}
-            <div className="h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{ width: loading ? '0%' : `${progressPct}%`, background: '#26B99A' }}
-              />
-            </div>
-            <div className="flex justify-between mt-1.5">
-              <span className="text-[11px]" style={{ color: '#999AAA' }}>
-                {loading ? '—' : `${fmtAmt(totalPaid)} paid`}
-              </span>
-              {!loading && totalOwed > 0 && (
-                <span className="text-[11px]" style={{ color: '#C0830A' }}>{fmtAmt(totalOwed)} outstanding</span>
-              )}
-            </div>
+            {/* Session progress bar */}
+            {!loading && monthTotal > 0 && (
+              <>
+                <div className="h-[5px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${monthPct}%`, background: '#26B99A' }}
+                  />
+                </div>
+                <div className="flex justify-between mt-1.5">
+                  <span className="text-[11px]" style={{ color: '#26B99A' }}>
+                    {fmtAmt(realizedThisMonth)} done
+                  </span>
+                  <span className="text-[11px]" style={{ color: '#999AAA' }}>
+                    {fmtAmt(scheduledThisMonth)} upcoming
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Log payment button or form */}
@@ -380,9 +365,14 @@ export function PaymentsPage() {
                     const statusClr = settled ? '#999AAA' : owed ? '#C0830A' : '#26B99A'
                     const dotColor  = settled ? '#26B99A' : owed ? '#E8A838' : '#26B99A'
 
+                    const pairKey  = `${b.child.id}:${b.teacher.id}`
+                    const pairData = monthByPair[pairKey]
+                    const pairTotal = pairData ? pairData.realizedAmount + pairData.scheduledAmount : 0
+                    const pairPct   = pairTotal > 0 ? (pairData!.realizedAmount / pairTotal) * 100 : 0
+
                     return (
                       <button
-                        key={`${b.child.id}:${b.teacher.id}`}
+                        key={pairKey}
                         onClick={() => navigate(`/payments/${b.child.id}/${b.teacher.id}`)}
                         className="w-full flex items-center gap-3 px-3.5 py-3"
                         style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none', background: '#fff' }}
@@ -395,7 +385,7 @@ export function PaymentsPage() {
                           <i className={`ti ${subjectIcon(b.teacher.subject)}`} style={{ fontSize: 16, color: hex }} />
                         </div>
 
-                        {/* Info */}
+                        {/* Info + mini bar */}
                         <div className="flex-1 min-w-0 text-left">
                           <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
                             {b.teacher.subject} · {b.teacher.name}
@@ -403,6 +393,24 @@ export function PaymentsPage() {
                           <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
                             {b.child.name}
                           </div>
+                          {pairTotal > 0 && (
+                            <>
+                              <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{ width: `${pairPct}%`, background: '#26B99A' }}
+                                />
+                              </div>
+                              <div className="flex justify-between mt-1">
+                                <span className="text-[10px]" style={{ color: '#26B99A' }}>
+                                  {fmtAmt(pairData!.realizedAmount)} done
+                                </span>
+                                <span className="text-[10px]" style={{ color: '#999AAA' }}>
+                                  {fmtAmt(pairData!.scheduledAmount)} upcoming
+                                </span>
+                              </div>
+                            </>
+                          )}
                         </div>
 
                         {/* Amount + status */}
@@ -412,9 +420,6 @@ export function PaymentsPage() {
                           </div>
                           <div className="text-[10px] mt-0.5" style={{ color: statusClr }}>{statusLbl}</div>
                         </div>
-
-                        {/* Status dot */}
-                        <div className="w-1.5 h-6 rounded-full flex-shrink-0" style={{ background: dotColor }} />
 
                         <i className="ti ti-chevron-right flex-shrink-0" style={{ fontSize: 14, color: '#999AAA' }} />
                       </button>

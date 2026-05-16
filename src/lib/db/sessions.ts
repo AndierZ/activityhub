@@ -100,6 +100,49 @@ export async function getLatestSessionDefaults(
   }
 }
 
+// ─── Monthly budget summary ───────────────────────────────────────────────────
+
+export interface MonthlySessionSummary {
+  scheduledAmount: number
+  realizedAmount:  number
+  byPair: Record<string, { scheduledAmount: number; realizedAmount: number }>
+}
+
+export async function getMonthlySessionSummary(
+  userId: string,
+  monthStart: Date,
+  monthEnd: Date
+): Promise<MonthlySessionSummary> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('status, price, child_id, teacher_id')
+    .eq('user_id', userId)
+    .gte('starts_at', monthStart.toISOString())
+    .lt('starts_at', monthEnd.toISOString())
+
+  if (error) throw error
+
+  let scheduledAmount = 0
+  let realizedAmount  = 0
+  const byPair: MonthlySessionSummary['byPair'] = {}
+
+  for (const s of data ?? []) {
+    if (!s.teacher_id) continue  // free-form sessions have no balance
+    const key = `${s.child_id}:${s.teacher_id}`
+    if (!byPair[key]) byPair[key] = { scheduledAmount: 0, realizedAmount: 0 }
+
+    if (s.status === 'scheduled') {
+      scheduledAmount          += Number(s.price)
+      byPair[key].scheduledAmount += Number(s.price)
+    } else if (s.status === 'completed') {
+      realizedAmount           += Number(s.price)
+      byPair[key].realizedAmount  += Number(s.price)
+    }
+  }
+
+  return { scheduledAmount, realizedAmount, byPair }
+}
+
 // ─── Teacher confirmation ─────────────────────────────────────────────────────
 
 export async function confirmSession(sessionId: string): Promise<void> {
