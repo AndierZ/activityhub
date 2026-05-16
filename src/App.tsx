@@ -25,7 +25,7 @@ function ProtectedRoutes() {
         <Route path="/payments"                      element={<PaymentsPage />} />
         <Route path="/payments/:childId/:teacherId"  element={<StatementPage />} />
         <Route path="/profile"  element={<ProfilePage />} />
-        <Route path="*"         element={<Navigate to="/" replace />} />
+<Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>
   )

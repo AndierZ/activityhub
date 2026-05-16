@@ -35,6 +35,21 @@ export async function getTeacherById(id: string): Promise<Teacher | null> {
   return data
 }
 
+export async function findTeacherByContact(
+  email?: string,
+  phone?: string
+): Promise<{ field: 'email' | 'phone'; teacher: Teacher } | null> {
+  if (email) {
+    const { data } = await supabase.from('teachers').select('*').eq('email', email).maybeSingle()
+    if (data) return { field: 'email', teacher: data }
+  }
+  if (phone) {
+    const { data } = await supabase.from('teachers').select('*').eq('phone', phone).maybeSingle()
+    if (data) return { field: 'phone', teacher: data }
+  }
+  return null
+}
+
 export async function createTeacher(
   userId: string,
   input: {
@@ -60,6 +75,37 @@ export async function createTeacher(
 
   if (error) throw error
   return data
+}
+
+export async function updateTeacher(
+  id: string,
+  input: {
+    name?: string
+    subject?: string
+    location?: string | null
+    email?: string | null
+    phone?: string | null
+    verified?: boolean
+  }
+): Promise<Teacher> {
+  const { data, error } = await supabase
+    .from('teachers')
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function deleteTeacher(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('teachers')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
 }
 
 // ─── User's saved teachers ────────────────────────────────────────────────────

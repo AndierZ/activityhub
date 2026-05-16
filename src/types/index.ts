@@ -6,6 +6,7 @@ export interface User {
   email: string
   full_name: string | null
   avatar_url: string | null
+  can_manage_teachers: boolean
   created_at: string
   updated_at: string | null
 }

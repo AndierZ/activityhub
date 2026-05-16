@@ -7,6 +7,9 @@ import {
   searchTeachers,
   saveTeacher,
   unsaveTeacher,
+  createTeacher,
+  updateTeacher,
+  findTeacherByContact,
 } from '../lib/db/teachers'
 import type { Teacher, Child, Session, UserTeacher } from '../types'
 import {
@@ -42,6 +45,7 @@ interface TeacherCardProps {
   isSaved: boolean
   onSaveToggle: (id: string, save: boolean) => void
   onClick: () => void
+  onEdit?: (t: Teacher) => void
 }
 
 export function TeacherCard({
@@ -51,6 +55,7 @@ export function TeacherCard({
   isSaved,
   onSaveToggle,
   onClick,
+  onEdit,
 }: TeacherCardProps) {
   const color = teacherAvatarColor(teacher.id)
   const colorHex = CHILD_COLOR_HEX[color]
@@ -142,20 +147,31 @@ export function TeacherCard({
           </div>
         </div>
 
-        {/* Heart */}
-        <button
-          onClick={e => {
-            e.stopPropagation()
-            onSaveToggle(teacher.id, !isSaved)
-          }}
-          style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', flexShrink: 0 }}
-          aria-label={isSaved ? 'Unsave teacher' : 'Save teacher'}
-        >
-          <i
-            className={isSaved ? 'ti ti-heart-filled' : 'ti ti-heart'}
-            style={{ fontSize: 20, color: isSaved ? '#E24B4A' : '#999AAA' }}
-          />
-        </button>
+        {/* Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          {onEdit && (
+            <button
+              onClick={e => { e.stopPropagation(); onEdit(teacher) }}
+              style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}
+              aria-label="Edit teacher"
+            >
+              <i className="ti ti-pencil" style={{ fontSize: 17, color: '#999AAA' }} />
+            </button>
+          )}
+          <button
+            onClick={e => {
+              e.stopPropagation()
+              onSaveToggle(teacher.id, !isSaved)
+            }}
+            style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}
+            aria-label={isSaved ? 'Unsave teacher' : 'Save teacher'}
+          >
+            <i
+              className={isSaved ? 'ti ti-heart-filled' : 'ti ti-heart'}
+              style={{ fontSize: 20, color: isSaved ? '#E24B4A' : '#999AAA' }}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Chips row */}
@@ -241,20 +257,36 @@ interface DiscoverOverlayProps {
   onSaveToggle: (id: string, save: boolean) => void
   onClose: () => void
   onNavigate: (id: string) => void
+  canManageTeachers: boolean
+  onTeacherCreated: () => void
+  initialEditId?: string
 }
+
+interface TeacherForm {
+  name: string; subject: string; location: string; email: string; phone: string; verified: boolean
+}
+const emptyForm = (): TeacherForm => ({ name: '', subject: '', location: '', email: '', phone: '', verified: false })
 
 export function DiscoverOverlay({
   savedTeacherIds,
   onSaveToggle,
   onClose,
   onNavigate,
+  canManageTeachers,
+  onTeacherCreated,
+  initialEditId,
 }: DiscoverOverlayProps) {
-  const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Edit form
+  const [editId, setEditId]     = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<TeacherForm>(emptyForm())
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const doSearch = useCallback(async (q: string) => {
     setLoading(true)
@@ -268,10 +300,45 @@ export function DiscoverOverlay({
     }
   }, [])
 
+  async function handleEdit() {
+    if (!editId || !editForm.name.trim() || !editForm.subject.trim()) return
+    setEditSaving(true); setEditError(null)
+    try {
+      const updated = await updateTeacher(editId, {
+        name: editForm.name.trim(), subject: editForm.subject.trim(),
+        location: editForm.location.trim() || null,
+        email: editForm.email.trim() || null,
+        phone: editForm.phone.trim() || null,
+        verified: editForm.verified,
+      })
+      setResults(prev => prev.map(t => t.id === editId ? updated : t))
+      setEditId(null)
+      onTeacherCreated()
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to update teacher.')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  function startEdit(t: Teacher) {
+    setEditId(t.id)
+    setEditForm({ name: t.name, subject: t.subject, location: t.location ?? '',
+      email: t.email ?? '', phone: t.phone ?? '', verified: t.verified })
+  }
+
   useEffect(() => {
-    doSearch('')
+    doSearch('').then(() => {
+      if (initialEditId) {
+        setResults(prev => {
+          const t = prev.find(r => r.id === initialEditId)
+          if (t) startEdit(t)
+          return prev
+        })
+      }
+    })
     setTimeout(() => inputRef.current?.focus(), 50)
-  }, [doSearch])
+  }, [doSearch, initialEditId])
 
   const handleQueryChange = (val: string) => {
     setQuery(val)
@@ -382,48 +449,33 @@ export function DiscoverOverlay({
           </div>
         ) : (
           results.map(teacher => (
-            <TeacherCard
-              key={teacher.id}
-              teacher={teacher}
-              childChips={[]}
-              hasConflict={false}
-              isSaved={savedTeacherIds.has(teacher.id)}
-              onSaveToggle={onSaveToggle}
-              onClick={() => {
-                onNavigate(teacher.id)
-              }}
-            />
+            <div key={teacher.id}>
+              {editId === teacher.id ? (
+                <InlineTeacherForm
+                  form={editForm}
+                  onChange={setEditForm}
+                  onSave={handleEdit}
+                  onCancel={() => { setEditId(null); setEditError(null) }}
+                  saving={editSaving}
+                  title={`Edit ${teacher.name}`}
+                  error={editError}
+                />
+              ) : (
+                <TeacherCard
+                  teacher={teacher}
+                  childChips={[]}
+                  hasConflict={false}
+                  isSaved={savedTeacherIds.has(teacher.id)}
+                  onSaveToggle={onSaveToggle}
+                  onClick={() => onNavigate(teacher.id)}
+                  onEdit={canManageTeachers ? startEdit : undefined}
+                />
+              )}
+            </div>
           ))
         )}
       </div>
 
-      {/* Footer */}
-      <div
-        style={{
-          padding: '12px 16px 24px',
-          borderTop: '1px solid #E8E8EC',
-        }}
-      >
-        <button
-          onClick={() => {
-            onClose()
-            navigate('/log')
-          }}
-          style={{
-            width: '100%',
-            background: '#F5F5F7',
-            border: 'none',
-            borderRadius: 12,
-            padding: '13px 0',
-            fontSize: 15,
-            fontWeight: 600,
-            color: '#7C6EE6',
-            cursor: 'pointer',
-          }}
-        >
-          Can't find them? Add a new teacher
-        </button>
-      </div>
     </div>
   )
 }
@@ -431,15 +483,21 @@ export function DiscoverOverlay({
 // ─── TeachersPage ─────────────────────────────────────────────────────────────
 
 export function TeachersPage() {
-  const { user, effectiveUserId } = useAuth()
+  const { user, effectiveUserId, canManageTeachers } = useAuth()
   const uid = effectiveUserId ?? user?.id ?? ''
   const navigate = useNavigate()
+
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addForm, setAddForm]         = useState<TeacherForm>(emptyForm())
+  const [addSaving, setAddSaving]     = useState(false)
+  const [addError, setAddError]       = useState<string | null>(null)
 
   const [savedTeachers, setSavedTeachers] = useState<UserTeacher[]>([])
   const [upcomingSessions, setUpcomingSessions] = useState<Session[]>([])
   const [conflictMap, setConflictMap] = useState<Record<string, boolean>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [showDiscover, setShowDiscover] = useState(false)
+  const [discoverInitialEditId, setDiscoverInitialEditId] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)
 
   // Load data on mount
@@ -536,6 +594,32 @@ export function TeachersPage() {
     }
   }
 
+  async function handleAddTeacher() {
+    if (!user || !addForm.name.trim() || !addForm.subject.trim()) return
+    setAddSaving(true); setAddError(null)
+    try {
+      const email = addForm.email.trim() || undefined
+      const phone = addForm.phone.trim() || undefined
+      const dupe = await findTeacherByContact(email, phone)
+      if (dupe) {
+        setAddError(`"${dupe.teacher.name}" already uses this ${dupe.field} — search for them in Find a new teacher.`)
+        return
+      }
+      const teacher = await createTeacher(user.id, {
+        name: addForm.name.trim(), subject: addForm.subject.trim(),
+        location: addForm.location.trim() || undefined,
+        email, phone,
+      })
+      await saveTeacher(uid, teacher.id)
+      setAddForm(emptyForm()); setShowAddForm(false)
+      loadData()
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Failed to add teacher.')
+    } finally {
+      setAddSaving(false)
+    }
+  }
+
   const filteredTeachers = savedTeachers.filter(ut => {
     const t = ut.teacher
     if (!t) return false
@@ -596,7 +680,7 @@ export function TeachersPage() {
 
       {/* Scrollable body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
-        {/* Find a new teacher banner */}
+        {/* Find a new teacher */}
         <button
           onClick={() => setShowDiscover(true)}
           style={{
@@ -609,7 +693,7 @@ export function TeachersPage() {
             alignItems: 'center',
             gap: 12,
             cursor: 'pointer',
-            marginBottom: 20,
+            marginBottom: 10,
           }}
         >
           <div
@@ -634,6 +718,62 @@ export function TeachersPage() {
           </div>
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'rgba(255,255,255,0.7)' }} />
         </button>
+
+        {/* Add teacher — trusted users only */}
+        {canManageTeachers && (
+          <button
+            onClick={() => { setShowAddForm(f => !f); setAddError(null) }}
+            style={{
+              width: '100%',
+              background: showAddForm ? '#EEEBfd' : '#fff',
+              border: `1px ${showAddForm ? 'solid' : 'dashed'} #7C6EE6`,
+              borderRadius: 14,
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              cursor: 'pointer',
+              marginBottom: showAddForm ? 10 : 20,
+            }}
+          >
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                background: '#EEEBfd',
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <i className="ti ti-plus" style={{ fontSize: 20, color: '#7C6EE6' }} />
+            </div>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#7C6EE6' }}>Add new teacher</div>
+              <div style={{ fontSize: 12, color: '#999AAA', marginTop: 2 }}>
+                Create a new profile in the directory
+              </div>
+            </div>
+            <i className="ti ti-chevron-right" style={{ fontSize: 18, color: '#7C6EE6', opacity: 0.5 }} />
+          </button>
+        )}
+
+        {/* Add teacher inline form */}
+        {canManageTeachers && showAddForm && (
+          <div style={{ marginBottom: 20 }}>
+            <InlineTeacherForm
+              form={addForm}
+              onChange={setAddForm}
+              onSave={handleAddTeacher}
+              onCancel={() => { setShowAddForm(false); setAddForm(emptyForm()); setAddError(null) }}
+              saving={addSaving}
+              title="New teacher"
+              error={addError}
+            />
+          </div>
+        )}
 
         {/* My teachers section */}
         {loading ? (
@@ -696,6 +836,10 @@ export function TeachersPage() {
                     isSaved
                     onSaveToggle={handleSaveToggle}
                     onClick={() => navigate(`/teachers/${teacher.id}`)}
+                    onEdit={canManageTeachers ? t => {
+                      setDiscoverInitialEditId(t.id)
+                      setShowDiscover(true)
+                    } : undefined}
                   />
                 )
               })
@@ -709,13 +853,91 @@ export function TeachersPage() {
         <DiscoverOverlay
           savedTeacherIds={savedTeacherIds}
           onSaveToggle={handleSaveToggle}
-          onClose={() => setShowDiscover(false)}
+          onClose={() => { setShowDiscover(false); setDiscoverInitialEditId(undefined) }}
           onNavigate={id => {
             setShowDiscover(false)
+            setDiscoverInitialEditId(undefined)
             navigate(`/teachers/${id}`)
           }}
+          canManageTeachers={canManageTeachers}
+          onTeacherCreated={loadData}
+          initialEditId={discoverInitialEditId}
         />
       )}
+    </div>
+  )
+}
+
+// ─── InlineTeacherForm ────────────────────────────────────────────────────────
+
+interface InlineTeacherFormProps {
+  form: TeacherForm
+  onChange: (f: TeacherForm) => void
+  onSave: () => void
+  onCancel: () => void
+  saving: boolean
+  title: string
+  error?: string | null
+}
+
+function InlineTeacherForm({ form, onChange, onSave, onCancel, saving, title, error }: InlineTeacherFormProps) {
+  const canSave = !!form.name.trim() && !!form.subject.trim()
+
+  return (
+    <div style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC', borderRadius: 14, padding: 16, marginBottom: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#555566', marginBottom: 10 }}>{title}</div>
+      {(['name', 'subject', 'location', 'email', 'phone'] as const).map(key => (
+        <input
+          key={key}
+          type={key === 'email' ? 'email' : key === 'phone' ? 'tel' : 'text'}
+          placeholder={
+            key === 'name' ? 'Teacher name *' :
+            key === 'subject' ? 'Subject (e.g. Piano) *' :
+            key === 'location' ? 'Location (optional)' :
+            key === 'email' ? 'Email (optional)' : 'Phone (optional)'
+          }
+          value={form[key] as string}
+          onChange={e => onChange({ ...form, [key]: e.target.value })}
+          style={{ display: 'block', width: '100%', boxSizing: 'border-box', fontSize: 14,
+            borderRadius: 9, padding: '9px 12px', marginBottom: 8, outline: 'none',
+            background: '#fff', border: '0.5px solid #E8E8EC', color: '#1A1A2E', fontFamily: 'inherit' }}
+        />
+      ))}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, cursor: 'pointer' }}>
+        <div
+          onClick={() => onChange({ ...form, verified: !form.verified })}
+          style={{ width: 40, height: 24, borderRadius: 12, background: form.verified ? '#7C6EE6' : '#D8D8DC',
+            position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}
+        >
+          <div style={{ position: 'absolute', top: 4, width: 16, height: 16, borderRadius: '50%',
+            background: '#fff', left: form.verified ? 20 : 4, transition: 'left 0.2s' }} />
+        </div>
+        <span style={{ fontSize: 14, color: '#555566' }}>Verified teacher</span>
+      </label>
+      {error && (
+        <div style={{ fontSize: 12, color: '#E86B5F', marginBottom: 10, lineHeight: 1.4 }}>
+          {error}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={onCancel}
+          style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '0.5px solid #E8E8EC',
+            background: '#fff', fontSize: 14, color: '#555566', cursor: 'pointer' }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onSave}
+          disabled={!canSave || saving}
+          style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+            background: canSave ? '#7C6EE6' : '#D8D8DC',
+            color: canSave ? '#fff' : '#999AAA',
+            fontSize: 14, fontWeight: 600, cursor: canSave ? 'pointer' : 'default' }}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
     </div>
   )
 }

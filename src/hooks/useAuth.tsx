@@ -13,6 +13,7 @@ interface AuthContextValue {
   user:             User | null
   session:          SupabaseSession | null
   loading:          boolean
+  canManageTeachers:          boolean
   effectiveUserId:  string | null   // primary user's id if linked, else own id
   refreshLinks:     () => Promise<void>
   signInWithGoogle: (redirectTo?: string) => Promise<void>
@@ -59,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email:      u.email ?? '',
             full_name:  u.user_metadata?.full_name ?? null,
             avatar_url: u.user_metadata?.avatar_url ?? null,
+            can_manage_teachers:   false,
             created_at: u.created_at ?? new Date().toISOString(),
             updated_at: null,
           })
@@ -106,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email:      authUser.email ?? '',
         full_name:  authUser.user_metadata?.full_name ?? null,
         avatar_url: authUser.user_metadata?.avatar_url ?? null,
+        can_manage_teachers:   false,
         created_at: new Date().toISOString(),
         updated_at: null,
       })
@@ -147,8 +150,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error
   }
 
+  const canManageTeachers = user?.can_manage_teachers ?? false
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, effectiveUserId, refreshLinks, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, canManageTeachers, effectiveUserId, refreshLinks, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   )

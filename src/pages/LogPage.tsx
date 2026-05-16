@@ -7,7 +7,7 @@ import {
 } from 'date-fns'
 import { useAuth } from '../hooks/useAuth'
 import { getChildren } from '../lib/db/children'
-import { getSavedTeachers, createTeacher, saveTeacher } from '../lib/db/teachers'
+import { getSavedTeachers } from '../lib/db/teachers'
 import {
   checkConflict,
   createOneOffSession,
@@ -60,11 +60,6 @@ export function LogPage() {
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null)
   const [noTeacher, setNoTeacher]         = useState(false)
   const [activityTitle, setActivityTitle] = useState('')
-  const [showAddForm, setShowAddForm]     = useState(false)
-  const [newName, setNewName]             = useState('')
-  const [newSubject, setNewSubject]       = useState('')
-  const [newLocation, setNewLocation]     = useState('')
-  const [savingTeacher, setSavingTeacher] = useState(false)
 
   // ── Step 2 ────────────────────────────────────────────────────────────────
   const [calMonth, setCalMonth]           = useState(new Date())
@@ -209,34 +204,6 @@ export function LogPage() {
   function handleStartTimeChange(nextStartTime: string) {
     setStartTime(nextStartTime)
     setEndTime(addMinutesToTimeValue(nextStartTime, durationPresetMinutes))
-  }
-
-  async function handleAddTeacher() {
-    if (!user || !newName.trim() || !newSubject.trim()) return
-    setSavingTeacher(true)
-    try {
-      const teacher = await createTeacher(user.id, {
-        name:     newName.trim(),
-        subject:  newSubject.trim(),
-        location: newLocation.trim() || undefined,
-      })
-      await saveTeacher(uid, teacher.id)
-      setSavedTeachers(prev => [
-        ...prev,
-        {
-          id: teacher.id, user_id: uid, teacher_id: teacher.id,
-          notes: null, created_at: new Date().toISOString(), updated_at: null,
-          teacher,
-        },
-      ])
-      setSelectedTeacher(teacher)
-      setShowAddForm(false)
-      setNewName(''); setNewSubject(''); setNewLocation('')
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setSavingTeacher(false)
-    }
   }
 
   async function handleSave() {
@@ -394,7 +361,7 @@ export function LogPage() {
             return (
               <button
                 key={t.id}
-                onClick={() => { setSelectedTeacher(t); setNoTeacher(false); setShowAddForm(false) }}
+                onClick={() => { setSelectedTeacher(t); setNoTeacher(false) }}
                 className="flex items-center gap-3 px-3.5 py-3 rounded-[14px] w-full text-left"
                 style={{
                   border:     `0.5px solid ${active ? '#7C6EE6' : '#E8E8EC'}`,
@@ -425,27 +392,27 @@ export function LogPage() {
             )
           })}
 
-          {/* Add new teacher */}
-          <button
-            onClick={() => { setShowAddForm(f => !f); setNoTeacher(false) }}
-            className="flex items-center gap-3 px-3.5 py-3 rounded-[14px] w-full text-left"
-            style={{ border: '0.5px dashed #D8D8DC', background: 'transparent' }}
+          {/* Can't find teacher */}
+          <div
+            className="flex items-center gap-3 px-3.5 py-3 rounded-[14px]"
+            style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC' }}
           >
-            <div
-              className="w-8 h-8 rounded-[9px] flex items-center justify-center flex-shrink-0"
-              style={{ border: '0.5px dashed #D8D8DC' }}
-            >
-              <i className="ti ti-plus" style={{ fontSize: 14, color: '#999AAA' }} />
-            </div>
-            <div>
-              <div className="text-[13px]" style={{ color: '#555566' }}>Add new teacher</div>
-              <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>Join the community directory</div>
-            </div>
-          </button>
+            <i className="ti ti-info-circle flex-shrink-0" style={{ fontSize: 16, color: '#999AAA' }} />
+            <p className="text-[12px] leading-relaxed" style={{ color: '#555566' }}>
+              Can't find your teacher?{' '}
+              <a
+                href="mailto:zian.xu42@gmail.com?subject=Add%20a%20teacher%20to%20ActivityHub"
+                style={{ color: '#7C6EE6', fontWeight: 500 }}
+              >
+                Let us know
+              </a>{' '}
+              and we'll add them to the directory.
+            </p>
+          </div>
 
           {/* No teacher option */}
           <button
-            onClick={() => { setNoTeacher(true); setSelectedTeacher(null); setShowAddForm(false) }}
+            onClick={() => { setNoTeacher(true); setSelectedTeacher(null) }}
             className="flex items-center gap-3 px-3.5 py-3 rounded-[14px] w-full text-left"
             style={{
               border:     `0.5px solid ${noTeacher ? '#7C6EE6' : '#E8E8EC'}`,
@@ -485,54 +452,6 @@ export function LogPage() {
           )}
 
           {/* Inline add form */}
-          {showAddForm && (
-            <div
-              className="px-4 py-4 rounded-[14px]"
-              style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC' }}
-            >
-              <input
-                className="w-full text-sm rounded-[9px] px-3 py-2 mb-2 outline-none"
-                style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
-                placeholder="Teacher name *"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-              />
-              <input
-                className="w-full text-sm rounded-[9px] px-3 py-2 mb-2 outline-none"
-                style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
-                placeholder="Subject (e.g. Piano) *"
-                value={newSubject}
-                onChange={e => setNewSubject(e.target.value)}
-              />
-              <input
-                className="w-full text-sm rounded-[9px] px-3 py-2 mb-3 outline-none"
-                style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
-                placeholder="Location (optional)"
-                value={newLocation}
-                onChange={e => setNewLocation(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { setShowAddForm(false); setNewName(''); setNewSubject(''); setNewLocation('') }}
-                  className="flex-1 py-2 rounded-[9px] text-sm"
-                  style={{ background: '#fff', border: '0.5px solid #E8E8EC', color: '#555566' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddTeacher}
-                  disabled={!newName.trim() || !newSubject.trim() || savingTeacher}
-                  className="flex-1 py-2 rounded-[9px] text-sm font-medium"
-                  style={{
-                    background: newName.trim() && newSubject.trim() ? '#7C6EE6' : '#D8D8DC',
-                    color:      newName.trim() && newSubject.trim() ? '#fff' : '#999AAA',
-                  }}
-                >
-                  {savingTeacher ? 'Saving…' : 'Add teacher'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Continue */}
