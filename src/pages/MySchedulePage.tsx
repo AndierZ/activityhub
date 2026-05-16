@@ -6,7 +6,7 @@ import {
 } from 'date-fns'
 import { useAuth } from '../hooks/useAuth'
 import { getTeacherWeekSessions, type TeacherSessionRow } from '../lib/db/teachers'
-import { confirmSession } from '../lib/db/sessions'
+import { confirmSession, unconfirmSession } from '../lib/db/sessions'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,10 +24,12 @@ function SessionCard({
   session,
   onSelect,
   onConfirm,
+  onUnconfirm,
 }: {
   session: TeacherSessionRow
   onSelect: (s: TeacherSessionRow) => void
   onConfirm: (id: string) => void
+  onUnconfirm: (id: string) => void
 }) {
   const confirmed  = !!session.teacher_confirmed_at
   const completed  = session.status === 'completed'
@@ -60,8 +62,7 @@ function SessionCard({
         </div>
       </button>
 
-      {/* Confirm button — only shown when not yet confirmed */}
-      {!confirmed && (
+      {!confirmed ? (
         <button
           onClick={(e) => { e.stopPropagation(); onConfirm(session.id) }}
           className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
@@ -69,6 +70,15 @@ function SessionCard({
         >
           <i className="ti ti-check" style={{ fontSize: 12 }} />
           Confirm
+        </button>
+      ) : !completed && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onUnconfirm(session.id) }}
+          className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
+          style={{ background: '#fff', color: '#999AAA', border: '0.5px solid #E8E8EC' }}
+        >
+          <i className="ti ti-x" style={{ fontSize: 12 }} />
+          Unconfirm
         </button>
       )}
     </div>
@@ -81,12 +91,15 @@ function DetailSheet({
   session,
   onClose,
   onConfirm,
+  onUnconfirm,
 }: {
   session: TeacherSessionRow
   onClose: () => void
   onConfirm: (id: string) => void
+  onUnconfirm: (id: string) => void
 }) {
   const confirmed = !!session.teacher_confirmed_at
+  const completed = session.status === 'completed'
 
   return (
     <>
@@ -130,6 +143,17 @@ function DetailSheet({
           >
             <i className="ti ti-check" style={{ fontSize: 15 }} />
             Confirm this session
+          </button>
+        )}
+
+        {confirmed && !completed && (
+          <button
+            onClick={() => { onUnconfirm(session.id); onClose() }}
+            className="w-full py-3 rounded-[12px] text-[14px] font-semibold flex items-center justify-center gap-2 mb-3"
+            style={{ background: '#fff', color: '#999AAA', border: '0.5px solid #E8E8EC' }}
+          >
+            <i className="ti ti-x" style={{ fontSize: 15 }} />
+            Unconfirm
           </button>
         )}
 
@@ -184,7 +208,6 @@ export function MySchedulePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claimedTeacher?.id, weekBase])
 
-  // Optimistic confirm — update local state immediately, fire RPC in background
   async function handleConfirm(sessionId: string) {
     const now = new Date().toISOString()
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: now } : s))
@@ -192,9 +215,20 @@ export function MySchedulePage() {
     try {
       await confirmSession(sessionId)
     } catch (err) {
-      // Roll back on failure
       console.error('confirm_session failed:', err)
       setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: null } : s))
+    }
+  }
+
+  async function handleUnconfirm(sessionId: string) {
+    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: null } : s))
+    if (selected?.id === sessionId) setSelected(s => s ? { ...s, teacher_confirmed_at: null } : s)
+    try {
+      await unconfirmSession(sessionId)
+    } catch (err) {
+      console.error('unconfirm_session failed:', err)
+      const now = new Date().toISOString()
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: now } : s))
     }
   }
 
@@ -325,6 +359,7 @@ export function MySchedulePage() {
               session={s}
               onSelect={setSelected}
               onConfirm={handleConfirm}
+              onUnconfirm={handleUnconfirm}
             />
           ))
         )}
@@ -335,6 +370,7 @@ export function MySchedulePage() {
           session={selected}
           onClose={() => setSelected(null)}
           onConfirm={handleConfirm}
+          onUnconfirm={handleUnconfirm}
         />
       )}
     </div>

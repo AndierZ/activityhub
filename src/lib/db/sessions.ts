@@ -107,6 +107,11 @@ export async function confirmSession(sessionId: string): Promise<void> {
   if (error) throw error
 }
 
+export async function unconfirmSession(sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc('unconfirm_session', { p_session_id: sessionId })
+  if (error) throw error
+}
+
 // ─── Conflict detection ───────────────────────────────────────────────────────
 
 export async function checkConflict(
