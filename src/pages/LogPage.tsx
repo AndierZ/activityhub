@@ -22,7 +22,13 @@ import type { Child, Teacher, UserTeacher, ConflictCheckResult } from '../types'
 
 // ─── Time presets ─────────────────────────────────────────────────────────────
 
-const QUICK_START_TIMES = ['15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00']
+const QUICK_START_TIMES = [
+  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+  '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
+  '18:00', '18:30', '19:00', '19:30', '20:00', '20:30',
+  '21:00',
+]
 
 function timeValueToLabel(value: string): string {
   const [hour, minute] = value.split(':').map(Number)
@@ -42,6 +48,82 @@ function durationBetweenTimeValues(start: string, end: string): number {
   const [startHour, startMinute] = start.split(':').map(Number)
   const [endHour, endMinute] = end.split(':').map(Number)
   return (endHour * 60 + endMinute) - (startHour * 60 + startMinute)
+}
+
+type SaveErrorShape = {
+  code?: string
+  message?: string
+  details?: string
+  hint?: string
+}
+
+function isSaveErrorShape(value: unknown): value is SaveErrorShape {
+  return typeof value === 'object' && value !== null
+}
+
+function saveErrorText(err: unknown, mode: 'one-off' | 'recurring'): string {
+  if (err instanceof TypeError && /fetch/i.test(err.message)) {
+    return 'Could not reach the server. Check your connection and try saving again.'
+  }
+
+  if (err instanceof Error) return err.message
+  if (!isSaveErrorShape(err)) {
+    return 'Could not save this activity because the server returned an unexpected error. Please try again.'
+  }
+
+  const message = err.message ?? ''
+  const details = err.details ?? ''
+  const combined = `${message} ${details}`.toLowerCase()
+
+  if (err.code === '42501' || combined.includes('row-level security') || combined.includes('permission denied')) {
+    return 'You do not have permission to save this activity for this account. Refresh the app and make sure you are signed in to the right profile.'
+  }
+
+  if (err.code === '23503' || combined.includes('foreign key')) {
+    if (combined.includes('child_id')) {
+      return 'This child no longer exists or is not available to your account. Refresh the app and choose the child again.'
+    }
+    if (combined.includes('teacher_id')) {
+      return 'This teacher no longer exists or is not available to your account. Refresh the app and choose the teacher again.'
+    }
+    return 'One of the selected records is no longer available. Refresh the app, choose the child and teacher again, then save.'
+  }
+
+  if (err.code === '23514' || combined.includes('check constraint')) {
+    if (combined.includes('ends_after_starts')) {
+      return 'The end time must be after the start time. Adjust the time and save again.'
+    }
+    if (combined.includes('end_after_start')) {
+      return 'The recurring end date must be after the first activity date.'
+    }
+    if (combined.includes('end_date_within_365_days')) {
+      return 'Recurring activities can only be scheduled up to 52 weeks (one year) out.'
+    }
+    if (combined.includes('price')) {
+      return 'The price must be zero or a positive amount.'
+    }
+    if (combined.includes('recurrence_rule')) {
+      return 'Choose weekly or biweekly for the recurring schedule.'
+    }
+    return 'Some activity details are invalid. Review the date, time, recurrence, and price, then save again.'
+  }
+
+  if (err.code === '23502' || combined.includes('null value')) {
+    return 'A required activity detail is missing. Review the child, activity, date, and time, then save again.'
+  }
+
+  if (err.code === '22P02' || combined.includes('invalid input syntax')) {
+    return 'One activity detail has an invalid format. Refresh the app, reselect the date and time, then save again.'
+  }
+
+  if (err.code === 'PGRST116') {
+    return `The activity may have been saved, but ${mode === 'recurring' ? 'the recurring series' : 'the saved activity'} could not be loaded back. Refresh your calendar to check before trying again.`
+  }
+
+  const serverMessage = message || details
+  if (serverMessage) return `Could not save this activity: ${serverMessage}`
+
+  return 'Could not save this activity because the server returned an unexpected error. Please try again.'
 }
 
 // ─── LogPage ──────────────────────────────────────────────────────────────────
@@ -70,7 +152,9 @@ export function LogPage() {
   const [durationSource, setDurationSource] = useState<'default' | 'remembered'>('default')
   const [recurring, setRecurring]         = useState(false)
   const [recurrenceRule, setRecurrenceRule] = useState<'weekly' | 'biweekly'>('weekly')
-  const [endDate, setEndDate]             = useState('')
+  const [recurringWeeks, setRecurringWeeks] = useState(8)
+  const [editingWeeks, setEditingWeeks]   = useState(false)
+  const [weeksDraft, setWeeksDraft]       = useState('')
   const [price, setPrice]                 = useState('')
   const [conflict, setConflict]           = useState<ConflictCheckResult | null>(null)
   const [ownSessions, setOwnSessions]     = useState<Array<{ id: string; starts_at: string; ends_at: string }>>([])
@@ -204,14 +288,39 @@ export function LogPage() {
     setEndTime(addMinutesToTimeValue(nextStartTime, durationPresetMinutes))
   }
 
+  function validateSaveInput(parsedPrice: number) {
+    if (!selectedChildId) throw new Error('Choose a child before saving this activity.')
+    if (!sessionStart || !sessionEnd || !startTime) {
+      throw new Error('Choose a date and time before saving this activity.')
+    }
+    if (sessionEnd <= sessionStart) {
+      throw new Error('The end time must be after the start time. Adjust the time and save again.')
+    }
+    if (noTeacher && !activityTitle.trim()) {
+      throw new Error('Enter an activity name before saving.')
+    }
+    if (!noTeacher && !selectedTeacher) {
+      throw new Error('Choose a teacher before saving this activity.')
+    }
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      throw new Error('The price must be zero or a positive amount.')
+    }
+    if (recurring && (recurringWeeks < 1 || recurringWeeks > 52)) {
+      throw new Error('Choose between 1 and 52 weeks for the recurring schedule.')
+    }
+  }
+
   async function handleSave() {
-    if (!user || !selectedChildId || !sessionStart || !sessionEnd || !startTime || durationMinutes <= 0) return
+    if (!user || durationMinutes <= 0) return
     setSaving(true)
     setSaveError(null)
     try {
+      const parsedPrice = noTeacher ? 0 : (price.trim() ? Number(price) : 0)
+      validateSaveInput(parsedPrice)
       const teacherId = selectedTeacher?.id ?? null
       const title     = noTeacher ? activityTitle.trim() || null : null
-      if (recurring && endDate) {
+      if (recurring) {
+        const computedEndDate = format(addDays(selectedDate, recurringWeeks * 7), 'yyyy-MM-dd')
         await createRecurringSessions(uid, {
           child_id:         selectedChildId,
           teacher_id:       teacherId,
@@ -219,10 +328,10 @@ export function LogPage() {
           day_of_week:      sessionStart.getDay(),
           time_of_day:      `${startTime}:00`,
           duration_minutes: durationMinutes,
-          price:            parseFloat(price) || 0,
+          price:            parsedPrice,
           recurrence_rule:  recurrenceRule,
           start_date:       format(selectedDate, 'yyyy-MM-dd'),
-          end_date:         endDate,
+          end_date:         computedEndDate,
         })
       } else {
         await createOneOffSession(uid, {
@@ -231,13 +340,13 @@ export function LogPage() {
           title,
           starts_at:  sessionStart.toISOString(),
           ends_at:    sessionEnd.toISOString(),
-          price:      parseFloat(price) || 0,
+          price:      parsedPrice,
         })
       }
       navigate('/', { replace: true })
     } catch (err) {
       console.error(err)
-      setSaveError(err instanceof Error ? err.message : 'Could not save this activity. Please try again.')
+      setSaveError(saveErrorText(err, recurring ? 'recurring' : 'one-off'))
     } finally {
       setSaving(false)
     }
@@ -470,8 +579,6 @@ export function LogPage() {
   // ────────────────────────────────────────────────────────────────────────────
 
   function Step2() {
-    const minRecurringEndDate = format(addDays(selectedDate, 1), 'yyyy-MM-dd')
-    const maxRecurringEndDate = format(addDays(selectedDate, 180), 'yyyy-MM-dd')
     // Check if a given start time (HH:MM) overlaps any of the user's own sessions on this date+teacher
     function overlapsOwnSession(timeStr: string, durationMins: number): boolean {
       const s = new Date(selectedDate)
@@ -483,7 +590,7 @@ export function LogPage() {
 
     const selfConflict = !!startTime && durationMinutes > 0 && overlapsOwnSession(startTime, durationPresetMinutes)
     const canContinue  = !!startTime && durationMinutes > 0 && !selfConflict &&
-                         (!recurring || (!!endDate && endDate >= minRecurringEndDate))
+                         (!recurring || recurringWeeks >= 1)
     const DAY_LABELS   = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
     return (
@@ -660,15 +767,7 @@ export function LogPage() {
             </div>
           </div>
           <button
-            onClick={() => {
-              setRecurring(r => {
-                const next = !r
-                if (next && (!endDate || endDate < minRecurringEndDate)) {
-                  setEndDate(minRecurringEndDate)
-                }
-                return next
-              })
-            }}
+            onClick={() => setRecurring(r => !r)}
             className="relative w-11 h-6 rounded-full flex-shrink-0"
             style={{ background: recurring ? '#7C6EE6' : '#D8D8DC' }}
           >
@@ -697,19 +796,58 @@ export function LogPage() {
                 </button>
               ))}
             </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: '#555566' }}>
-                Ends on <span style={{ color: '#999AAA', fontWeight: 400 }}>(max 180 days)</span>
-              </label>
-              <input
-                type="date"
-                className="w-full text-sm rounded-[9px] px-3 py-2 outline-none"
-                style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
-                value={endDate}
-                min={minRecurringEndDate}
-                max={maxRecurringEndDate}
-                onChange={e => setEndDate(e.target.value)}
-              />
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-medium" style={{ color: '#555566' }}>Repeats for</div>
+                <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
+                  Until {format(addDays(selectedDate, recurringWeeks * 7), 'MMM d, yyyy')}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setRecurringWeeks(w => Math.max(1, w - 1))}
+                  className="w-8 h-8 rounded-[9px] flex items-center justify-center"
+                  style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC' }}
+                >
+                  <i className="ti ti-minus" style={{ fontSize: 13, color: '#555566' }} />
+                </button>
+                {editingWeeks ? (
+                  <input
+                    autoFocus
+                    type="number"
+                    min={1}
+                    max={52}
+                    value={weeksDraft}
+                    onChange={e => setWeeksDraft(e.target.value)}
+                    onBlur={() => {
+                      const parsed = parseInt(weeksDraft, 10)
+                      if (!isNaN(parsed)) setRecurringWeeks(Math.min(52, Math.max(1, parsed)))
+                      setEditingWeeks(false)
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
+                    }}
+                    className="text-sm font-semibold text-center outline-none rounded-[6px] px-1"
+                    style={{ color: '#1A1A2E', width: 52, background: '#EEEBfd', border: '1px solid #7C6EE6' }}
+                  />
+                ) : (
+                  <span
+                    className="text-sm font-semibold text-center cursor-text"
+                    style={{ color: '#1A1A2E', minWidth: 52 }}
+                    onDoubleClick={() => { setWeeksDraft(String(recurringWeeks)); setEditingWeeks(true) }}
+                    title="Double-click to type"
+                  >
+                    {recurringWeeks} wk{recurringWeeks !== 1 ? 's' : ''}
+                  </span>
+                )}
+                <button
+                  onClick={() => setRecurringWeeks(w => Math.min(52, w + 1))}
+                  className="w-8 h-8 rounded-[9px] flex items-center justify-center"
+                  style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC' }}
+                >
+                  <i className="ti ti-plus" style={{ fontSize: 13, color: '#555566' }} />
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -831,11 +969,9 @@ export function LogPage() {
                   <div className="text-sm font-medium" style={{ color: '#1A1A2E' }}>
                     Every {format(sessionStart, 'EEEE')} · {recurrenceRule === 'weekly' ? 'weekly' : 'biweekly'}
                   </div>
-                  {endDate && (
-                    <div className="text-xs mt-0.5" style={{ color: '#999AAA' }}>
-                      Until {format(new Date(endDate), 'MMM d, yyyy')}
-                    </div>
-                  )}
+                  <div className="text-xs mt-0.5" style={{ color: '#999AAA' }}>
+                    {recurringWeeks} week{recurringWeeks !== 1 ? 's' : ''} · Until {format(addDays(selectedDate, recurringWeeks * 7), 'MMM d, yyyy')}
+                  </div>
                 </div>
               </div>
             )}
