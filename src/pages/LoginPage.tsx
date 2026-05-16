@@ -12,8 +12,8 @@ export function LoginPage() {
       setError(null)
       await signInWithGoogle()
       // Browser redirects to Google — nothing more to do here
-    } catch (err: any) {
-      setError(err.message ?? 'Something went wrong. Please try again.')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
       setLoading(false)
     }
   }

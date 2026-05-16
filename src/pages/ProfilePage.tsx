@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { getChildren, createChild, updateChild, deleteChild } from '../lib/db/children'
@@ -47,6 +47,14 @@ export function ProfilePage() {
   const [notifPayment,  setNotifPayment]  = useState(() => localStorage.getItem('notif_payment')  !== 'false')
   const [notifConflict, setNotifConflict] = useState(() => localStorage.getItem('notif_conflict') === 'true')
 
+  // ── Avatar upload ────────────────────────────────────────────────────────────
+  const [userAvatarUrl, setUserAvatarUrl]         = useState<string | null>(user?.avatar_url ?? null)
+  const [uploadingUserAvatar, setUploadingUserAvatar] = useState(false)
+  const [uploadingChildAvatarId, setUploadingChildAvatarId] = useState<string | null>(null)
+  const userFileInputRef  = useRef<HTMLInputElement>(null)
+  const childFileInputRef = useRef<HTMLInputElement>(null)
+  const childUploadTargetRef = useRef<string | null>(null)
+
   // ── Sign out ─────────────────────────────────────────────────────────────────
   const [signingOut, setSigningOut] = useState(false)
 
@@ -56,11 +64,67 @@ export function ProfilePage() {
     if (!user) return
     getChildren(user.id).then(setChildren).catch(console.error)
     setDisplayName(user.full_name ?? '')
+    setUserAvatarUrl(user.avatar_url ?? null)
   }, [user])
 
   useEffect(() => { localStorage.setItem('notif_session',  String(notifSession))  }, [notifSession])
   useEffect(() => { localStorage.setItem('notif_payment',  String(notifPayment))  }, [notifPayment])
   useEffect(() => { localStorage.setItem('notif_conflict', String(notifConflict)) }, [notifConflict])
+
+  // ── Avatar upload helpers ────────────────────────────────────────────────────
+
+  async function uploadAvatarFile(storagePath: string, file: File): Promise<string> {
+    const ext = file.name.split('.').pop() ?? 'jpg'
+    const path = `${storagePath}.${ext}`
+    const { error } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (error) throw error
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+    return `${data.publicUrl}?t=${Date.now()}`
+  }
+
+  async function handleUserAvatarChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setUploadingUserAvatar(true)
+    try {
+      const url = await uploadAvatarFile(`${user.id}/user`, file)
+      await supabase
+        .from('users')
+        .update({ avatar_url: url, updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+      setUserAvatarUrl(url)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setUploadingUserAvatar(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleChildFileInput(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const childId = childUploadTargetRef.current
+    if (!file || !childId || !user) return
+    setUploadingChildAvatarId(childId)
+    try {
+      const url = await uploadAvatarFile(`${user.id}/child-${childId}`, file)
+      const updated = await updateChild(childId, { avatar_url: url })
+      setChildren(prev => prev.map(c => c.id === childId ? updated : c))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setUploadingChildAvatarId(null)
+      childUploadTargetRef.current = null
+      e.target.value = ''
+    }
+  }
+
+  function openChildAvatarPicker(childId: string) {
+    childUploadTargetRef.current = childId
+    childFileInputRef.current?.click()
+  }
 
   // ── Child handlers ───────────────────────────────────────────────────────────
 
@@ -182,11 +246,34 @@ export function ProfilePage() {
             className="flex items-center gap-3.5 p-3.5 rounded-[14px]"
             style={{ background: '#F5F5F7' }}
           >
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0"
-              style={{ background: '#EEEBfd', color: '#7C6EE6' }}
-            >
-              {initials}
+            <div className="relative flex-shrink-0">
+              <div
+                className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-base font-bold"
+                style={userAvatarUrl ? {} : { background: '#EEEBfd', color: '#7C6EE6' }}
+              >
+                {userAvatarUrl
+                  ? <img src={userAvatarUrl} alt="" className="w-full h-full object-cover" />
+                  : initials
+                }
+              </div>
+              <button
+                onClick={() => userFileInputRef.current?.click()}
+                disabled={uploadingUserAvatar}
+                className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center"
+                style={{ background: '#7C6EE6', border: '2px solid #F5F5F7' }}
+              >
+                {uploadingUserAvatar
+                  ? <div className="w-2 h-2 rounded-full border border-white border-t-transparent animate-spin" />
+                  : <i className="ti ti-camera" style={{ fontSize: 9, color: '#fff' }} />
+                }
+              </button>
+              <input
+                ref={userFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleUserAvatarChange}
+              />
             </div>
             <div className="flex-1 min-w-0">
               {editingName ? (
@@ -264,11 +351,27 @@ export function ProfilePage() {
                     className="w-full flex items-center gap-3 px-3.5 py-3"
                     style={{ background: editing ? '#F5F5F7' : '#fff' }}
                   >
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                      style={{ background: bg, color: hex }}
-                    >
-                      {getInitials(child.name)}
+                    <div className="relative flex-shrink-0">
+                      <div
+                        className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold"
+                        style={child.avatar_url ? {} : { background: bg, color: hex }}
+                      >
+                        {child.avatar_url
+                          ? <img src={child.avatar_url} alt="" className="w-full h-full object-cover" />
+                          : getInitials(child.name)
+                        }
+                      </div>
+                      <button
+                        onClick={e => { e.stopPropagation(); openChildAvatarPicker(child.id) }}
+                        disabled={uploadingChildAvatarId === child.id}
+                        className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center"
+                        style={{ background: '#7C6EE6', border: '2px solid #fff' }}
+                      >
+                        {uploadingChildAvatarId === child.id
+                          ? <div className="w-1.5 h-1.5 rounded-full border border-white border-t-transparent animate-spin" />
+                          : <i className="ti ti-camera" style={{ fontSize: 7, color: '#fff' }} />
+                        }
+                      </button>
                     </div>
                     <div className="flex-1 text-left">
                       <div className="text-[13px] font-medium" style={{ color: '#1A1A2E' }}>
@@ -510,6 +613,15 @@ export function ProfilePage() {
         </div>
 
       </div>
+
+      {/* Hidden file input for child avatar uploads */}
+      <input
+        ref={childFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleChildFileInput}
+      />
     </div>
   )
 }

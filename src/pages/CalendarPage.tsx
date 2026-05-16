@@ -7,7 +7,14 @@ import {
 } from 'date-fns'
 import { useAuth } from '../hooks/useAuth'
 import { getChildren } from '../lib/db/children'
-import { getSessionsForWeek, checkConflict } from '../lib/db/sessions'
+import {
+  getSessionsForWeek,
+  checkConflict,
+  completeSession,
+  deleteSession,
+  deleteSessionsInSeriesFrom,
+  updateSession,
+} from '../lib/db/sessions'
 import type { Child, Session } from '../types'
 import { getChildColor, CHILD_COLOR_HEX, CHILD_COLOR_BG } from '../types'
 
@@ -65,10 +72,12 @@ function SessionBlock({
   session,
   allChildren,
   hasConflict,
+  onSelect,
 }: {
   session: Session
   allChildren: Child[]
   hasConflict: boolean
+  onSelect: (session: Session) => void
 }) {
   const child = allChildren.find(c => c.id === session.child_id)
   if (!child) return null
@@ -83,7 +92,9 @@ function SessionBlock({
   const timeRange = `${format(startTime, 'h:mm')}-${format(endTime, 'h:mm a')}`
   const location  = session.teacher?.location ?? null
   const subtitle  = [timeRange, location].filter(Boolean).join(' · ')
-  const title     = [session.teacher?.subject, session.teacher?.name].filter(Boolean).join(' · ')
+  const title     = session.teacher
+    ? [session.teacher.subject, session.teacher.name].filter(Boolean).join(' · ')
+    : (session.title ?? 'Activity')
 
   const blockStyle = hasConflict
     ? {
@@ -99,7 +110,11 @@ function SessionBlock({
       }
 
   return (
-    <div className="rounded-[10px] px-2.5 py-2 mb-1.5 relative" style={blockStyle}>
+    <button
+      onClick={() => onSelect(session)}
+      className="w-full text-left rounded-[10px] px-2.5 py-2 mb-1.5 relative"
+      style={blockStyle}
+    >
       {/* Child badge — top right */}
       <span
         className="absolute top-1.5 right-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
@@ -115,12 +130,314 @@ function SessionBlock({
         {subtitle}
       </div>
 
+      {session.status === 'completed' && (
+        <div className="inline-flex items-center gap-1 mt-1 text-[11px]" style={{ color: '#0F6E56' }}>
+          <i className="ti ti-check" style={{ fontSize: 11 }} />
+          Completed
+        </div>
+      )}
+
       {hasConflict && (
         <div className="flex items-center gap-1 mt-1 text-[11px]" style={{ color: '#B87A10' }}>
           <i className="ti ti-alert-triangle" style={{ fontSize: 11 }} />
           Another student also logged this time
         </div>
       )}
+    </button>
+  )
+}
+
+function toDateTimeLocalValue(value: string): string {
+  return format(parseISO(value), "yyyy-MM-dd'T'HH:mm")
+}
+
+function parseDateTimeLocal(value: string): Date {
+  return new Date(value)
+}
+
+function SessionActionSheet({
+  session,
+  allChildren,
+  onClose,
+  onSaved,
+}: {
+  session: Session
+  allChildren: Child[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const child = allChildren.find(c => c.id === session.child_id)
+  const [mode, setMode] = useState<'details' | 'edit' | 'delete'>('details')
+  const [startsAt, setStartsAt] = useState(() => toDateTimeLocalValue(session.starts_at))
+  const [price, setPrice] = useState(() => String(session.price ?? 0))
+  const [notes, setNotes] = useState(session.notes ?? '')
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const start = parseISO(session.starts_at)
+  const end = parseISO(session.ends_at)
+  const durationMs = end.getTime() - start.getTime()
+  const canSave = startsAt && Number(price) >= 0
+
+  async function handleSave() {
+    if (!canSave || saving) return
+    setSaving(true)
+    try {
+      const nextStart = parseDateTimeLocal(startsAt)
+      const nextEnd = new Date(nextStart.getTime() + durationMs)
+      await updateSession(session.id, {
+        starts_at: nextStart.toISOString(),
+        ends_at: nextEnd.toISOString(),
+        price: Number(price) || 0,
+        notes: notes.trim() || null,
+      })
+      onSaved()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleComplete() {
+    if (saving || session.status === 'completed') return
+    setSaving(true)
+    try {
+      await completeSession(session.id)
+      onSaved()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDeleteOne() {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      await deleteSession(session.id)
+      onSaved()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleDeleteSeriesFromHere() {
+    if (deleting || !session.template_id) return
+    setDeleting(true)
+    try {
+      await deleteSessionsInSeriesFrom(session.template_id, session.starts_at)
+      onSaved()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col justify-end" style={{ background: 'rgba(26,26,46,0.18)' }}>
+      <button className="flex-1" onClick={onClose} aria-label="Close session editor" />
+      <div className="bg-white rounded-t-[18px] px-5 pt-4 pb-5 shadow-xl">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="flex-1 min-w-0">
+            <div className="text-[15px] font-semibold truncate" style={{ color: '#1A1A2E' }}>
+              {session.teacher?.subject} · {session.teacher?.name}
+            </div>
+            <div className="text-[12px] mt-0.5" style={{ color: '#555566' }}>
+              {child?.name ?? 'Child'} · {session.status === 'completed' ? 'Completed' : 'Scheduled'}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-[9px] flex items-center justify-center"
+            style={{ background: '#F5F5F7', color: '#555566' }}
+            aria-label="Close"
+          >
+            <i className="ti ti-x" />
+          </button>
+        </div>
+
+        {mode === 'delete' ? (
+          <>
+            <div
+              className="rounded-[12px] p-3 mb-3 text-xs leading-relaxed"
+              style={{ background: '#FEF8EC', border: '0.5px solid #E8A838', color: '#7A5510' }}
+            >
+              This activity is part of a recurring series. Choose how much of the series to delete.
+            </div>
+
+            <button
+              onClick={handleDeleteOne}
+              disabled={deleting}
+              className="w-full py-3 rounded-[12px] text-[13px] font-semibold mb-2"
+              style={{ border: '0.5px solid #F09595', color: '#A32D2D' }}
+            >
+              {deleting ? 'Deleting...' : 'Delete this activity only'}
+            </button>
+
+            <button
+              onClick={handleDeleteSeriesFromHere}
+              disabled={deleting}
+              className="w-full py-3 rounded-[12px] text-[13px] font-semibold mb-2"
+              style={{ background: '#E24B4A', color: '#fff' }}
+            >
+              {deleting ? 'Deleting...' : 'Delete this and following activities'}
+            </button>
+
+            <button
+              onClick={() => setMode('details')}
+              disabled={deleting}
+              className="w-full py-3 rounded-[12px] text-[13px] font-medium"
+              style={{ color: '#555566' }}
+            >
+              Cancel
+            </button>
+          </>
+        ) : mode === 'details' ? (
+          <>
+            <div className="rounded-[12px] overflow-hidden mb-3" style={{ border: '0.5px solid #E8E8EC' }}>
+              {[
+                ['Date and time', `${format(start, 'EEE, MMM d')} · ${format(start, 'h:mm')}-${format(end, 'h:mm a')}`],
+                ['Price', `$${Number(session.price).toFixed(2).replace(/\.00$/, '')}`],
+                ['Status', session.status === 'completed' ? 'Completed · included in payments' : 'Scheduled · not included in payments yet'],
+              ].map(([label, value], i) => (
+                <div
+                  key={label}
+                  className="flex items-center gap-3 px-3.5 py-3"
+                  style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none' }}
+                >
+                  <div className="text-[12px] flex-1" style={{ color: '#999AAA' }}>{label}</div>
+                  <div className="text-[12px] font-medium text-right" style={{ color: '#1A1A2E' }}>{value}</div>
+                </div>
+              ))}
+              {session.notes && (
+                <div className="px-3.5 py-3" style={{ borderTop: '0.5px solid #E8E8EC' }}>
+                  <div className="text-[12px] mb-1" style={{ color: '#999AAA' }}>Notes</div>
+                  <div className="text-[12px] leading-relaxed" style={{ color: '#555566' }}>{session.notes}</div>
+                </div>
+              )}
+            </div>
+
+            {session.status !== 'completed' && (
+              <button
+                onClick={handleComplete}
+                disabled={saving}
+                className="w-full py-3 rounded-[12px] text-[13px] font-semibold mb-2"
+                style={{ background: '#26B99A', color: '#fff' }}
+              >
+                {saving ? 'Saving...' : 'Mark session complete'}
+              </button>
+            )}
+
+            <button
+              onClick={() => setMode('edit')}
+              className="w-full py-3 rounded-[12px] text-[13px] font-semibold mb-2"
+              style={{ border: '0.5px solid #7C6EE6', color: '#7C6EE6' }}
+            >
+              Edit details
+            </button>
+
+            <button
+              onClick={() => {
+                if (session.template_id) {
+                  setMode('delete')
+                } else {
+                  void handleDeleteOne()
+                }
+              }}
+              disabled={deleting}
+              className="w-full py-3 rounded-[12px] text-[13px] font-medium"
+              style={{ border: '0.5px solid #F09595', color: '#A32D2D' }}
+            >
+              {deleting ? 'Deleting...' : 'Delete activity'}
+            </button>
+          </>
+        ) : (
+          <>
+            <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1.5" style={{ color: '#999AAA' }}>
+              Date and time
+            </label>
+            <input
+              type="datetime-local"
+              className="w-full text-sm rounded-[10px] px-3 py-2.5 outline-none mb-3"
+              style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
+              value={startsAt}
+              onChange={e => setStartsAt(e.target.value)}
+            />
+
+            <div className="flex gap-2 mb-3">
+              <div className="flex-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1.5" style={{ color: '#999AAA' }}>
+                  Price
+                </label>
+                <div
+                  className="flex items-center rounded-[10px]"
+                  style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC' }}
+                >
+                  <span className="pl-3 text-sm" style={{ color: '#999AAA' }}>$</span>
+                  <input
+                    type="number"
+                    className="flex-1 text-sm px-2 py-2.5 outline-none bg-transparent"
+                    style={{ color: '#1A1A2E' }}
+                    value={price}
+                    min="0"
+                    step="0.01"
+                    onChange={e => setPrice(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1.5" style={{ color: '#999AAA' }}>
+                  Duration
+                </label>
+                <div
+                  className="text-sm rounded-[10px] px-3 py-2.5"
+                  style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC', color: '#555566' }}
+                >
+                  {Math.round(durationMs / 60000)} min
+                </div>
+              </div>
+            </div>
+
+            <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1.5" style={{ color: '#999AAA' }}>
+              Notes
+            </label>
+            <textarea
+              className="w-full text-sm rounded-[10px] px-3 py-2.5 outline-none mb-4 resize-none"
+              style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC', color: '#1A1A2E' }}
+              rows={2}
+              placeholder="Optional"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setMode('details')}
+                className="py-3 px-5 rounded-[12px] text-[13px] font-medium"
+                style={{ border: '0.5px solid #E8E8EC', color: '#555566' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!canSave || saving}
+                className="flex-1 py-3 rounded-[12px] text-[13px] font-semibold"
+                style={{
+                  background: canSave ? '#7C6EE6' : '#E8E8EC',
+                  color: canSave ? '#fff' : '#999AAA',
+                }}
+              >
+                {saving ? 'Saving...' : 'Save details'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -138,6 +455,7 @@ export function CalendarPage() {
   const [sessions, setSessions]               = useState<Session[]>([])
   const [conflictMap, setConflictMap]         = useState<Map<string, boolean>>(new Map())
   const [loading, setLoading]                 = useState(true)
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null)
 
   const weekDays = eachDayOfInterval({
     start: weekStart,
@@ -181,7 +499,11 @@ export function CalendarPage() {
 
       // Parallel conflict checks
       const results = await Promise.all(
-        data.map(s => checkConflict(s.teacher_id, s.starts_at, s.ends_at, user.id))
+        data.map(s => (
+          s.status === 'scheduled' && s.teacher_id
+            ? checkConflict(s.teacher_id, s.starts_at, s.ends_at, user.id)
+            : Promise.resolve({ has_conflict: false, conflicting_sessions_count: 0 })
+        ))
       )
       const map = new Map<string, boolean>()
       data.forEach((s, i) => map.set(s.id, results[i].has_conflict))
@@ -367,6 +689,7 @@ export function CalendarPage() {
                       session={s}
                       allChildren={children}
                       hasConflict={conflictMap.get(s.id) ?? false}
+                      onSelect={setSelectedSession}
                     />
                   ))}
                 </div>
@@ -393,6 +716,18 @@ export function CalendarPage() {
           </>
         )}
       </div>
+
+      {selectedSession && (
+        <SessionActionSheet
+          session={selectedSession}
+          allChildren={children}
+          onClose={() => setSelectedSession(null)}
+          onSaved={() => {
+            setSelectedSession(null)
+            loadSessions()
+          }}
+        />
+      )}
 
     </div>
   )

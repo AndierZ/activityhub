@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { format, startOfMonth, addMonths } from 'date-fns'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
-import { getAllBalances, logPayment } from '../lib/db/payments'
+import { getAllBalances, logPayment, logPrepayment } from '../lib/db/payments'
 import { getSavedTeachers } from '../lib/db/teachers'
 import { getChildren } from '../lib/db/children'
 import {
   getChildColor, CHILD_COLOR_HEX, CHILD_COLOR_BG,
 } from '../types'
-import type { TeacherBalance, Child, UserTeacher } from '../types'
+import type { BalanceSummary, Child, UserTeacher } from '../types'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,8 @@ function subjectIcon(subject: string): string {
 function fmtAmt(n: number): string {
   return `$${Math.abs(n).toFixed(2).replace(/\.00$/, '')}`
 }
+
+type PaymentMode = 'payment' | 'prepayment'
 
 // ─── Log payment form ─────────────────────────────────────────────────────────
 
@@ -49,19 +51,25 @@ export function LogPaymentForm({
   const [amount,     setAmount]     = useState('')
   const [date,       setDate]       = useState(format(new Date(), 'yyyy-MM-dd'))
   const [note,       setNote]       = useState('')
+  const [mode,       setMode]       = useState<PaymentMode>('payment')
   const [saving,     setSaving]     = useState(false)
 
   async function handleSave() {
     if (!user || !childId || !teacherId || !amount) return
     setSaving(true)
     try {
-      await logPayment(user.id, {
+      const payload = {
         child_id:   childId,
         teacher_id: teacherId,
         amount:     parseFloat(amount),
         date,
         note:       note.trim() || undefined,
-      })
+      }
+      if (mode === 'prepayment') {
+        await logPrepayment(user.id, payload)
+      } else {
+        await logPayment(user.id, payload)
+      }
       onSave()
     } catch (err) {
       console.error(err)
@@ -76,6 +84,31 @@ export function LogPaymentForm({
     <div className="px-5 pb-5 pt-3" style={{ borderBottom: '0.5px solid #E8E8EC', background: '#F5F5F7' }}>
       <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: '#999AAA' }}>
         Log a payment
+      </div>
+
+      {/* Type */}
+      <div className="flex gap-2 mb-2">
+        {([
+          ['payment', 'Payment made'],
+          ['prepayment', 'Prepayment'],
+        ] as const).map(([value, label]) => {
+          const active = mode === value
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setMode(value)}
+              className="flex-1 py-2 rounded-[9px] text-sm font-medium"
+              style={{
+                background: active ? '#EEEBfd' : '#fff',
+                border:     `0.5px solid ${active ? '#7C6EE6' : '#E8E8EC'}`,
+                color:      active ? '#7C6EE6' : '#555566',
+              }}
+            >
+              {label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Child + Teacher */}
@@ -154,7 +187,7 @@ export function LogPaymentForm({
             color:      canSave ? '#fff' : '#999AAA',
           }}
         >
-          {saving ? 'Saving…' : 'Save payment'}
+          {saving ? 'Saving…' : mode === 'prepayment' ? 'Save prepayment' : 'Save payment'}
         </button>
       </div>
     </div>
@@ -167,7 +200,7 @@ export function PaymentsPage() {
   const { user }  = useAuth()
   const navigate  = useNavigate()
 
-  const [balances,       setBalances]       = useState<TeacherBalance[]>([])
+  const [balances,       setBalances]       = useState<BalanceSummary[]>([])
   const [children,       setChildren]       = useState<Child[]>([])
   const [savedTeachers,  setSavedTeachers]  = useState<UserTeacher[]>([])
   const [paidThisMonth,  setPaidThisMonth]  = useState(0)

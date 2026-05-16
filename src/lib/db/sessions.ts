@@ -4,6 +4,7 @@ import type {
   RecurrenceTemplate,
   CreateSessionInput,
   CreateRecurringSessionInput,
+  UpdateSessionInput,
   ConflictCheckResult,
 } from '../../types'
 import { addWeeks, addDays, parseISO, setHours, setMinutes } from 'date-fns'
@@ -54,6 +55,51 @@ export async function getSessionsByTeacher(
   return data
 }
 
+export async function getSessionsForDateAndTeacher(
+  userId: string,
+  teacherId: string,
+  date: Date
+): Promise<Array<{ id: string; starts_at: string; ends_at: string }>> {
+  const dayStart = new Date(date); dayStart.setHours(0, 0, 0, 0)
+  const dayEnd   = new Date(date); dayEnd.setHours(23, 59, 59, 999)
+
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('id, starts_at, ends_at')
+    .eq('user_id',    userId)
+    .eq('teacher_id', teacherId)
+    .gte('starts_at', dayStart.toISOString())
+    .lte('starts_at', dayEnd.toISOString())
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getLatestSessionDefaults(
+  userId: string,
+  childId: string,
+  teacherId: string
+): Promise<{ duration_minutes: number; price: number } | null> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('starts_at, ends_at, price')
+    .eq('user_id', userId)
+    .eq('child_id', childId)
+    .eq('teacher_id', teacherId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) return null
+
+  const durationMs = new Date(data.ends_at).getTime() - new Date(data.starts_at).getTime()
+  return {
+    duration_minutes: durationMs > 0 ? Math.round(durationMs / 60000) : 60,
+    price: Number(data.price),
+  }
+}
+
 // ─── Conflict detection ───────────────────────────────────────────────────────
 
 export async function checkConflict(
@@ -90,7 +136,8 @@ export async function createOneOffSession(
     .insert({
       user_id:    userId,
       child_id:   input.child_id,
-      teacher_id: input.teacher_id,
+      teacher_id: input.teacher_id ?? null,
+      title:      input.title ?? null,
       starts_at:  input.starts_at,
       ends_at:    input.ends_at,
       price:      input.price,
@@ -114,7 +161,7 @@ export async function createRecurringSessions(
     .insert({
       user_id:         userId,
       child_id:        input.child_id,
-      teacher_id:      input.teacher_id,
+      teacher_id:      input.teacher_id ?? null,
       day_of_week:     input.day_of_week,
       time_of_day:     input.time_of_day,
       price:           input.price,
@@ -134,6 +181,7 @@ export async function createRecurringSessions(
     input.end_date,
     input.day_of_week,
     input.time_of_day,
+    input.duration_minutes,
     input.recurrence_rule
   )
 
@@ -141,7 +189,8 @@ export async function createRecurringSessions(
   const sessionRows = sessionDates.map(({ startsAt, endsAt }) => ({
     user_id:     userId,
     child_id:    input.child_id,
-    teacher_id:  input.teacher_id,
+    teacher_id:  input.teacher_id ?? null,
+    title:       input.title ?? null,
     template_id: template.id,
     starts_at:   startsAt,
     ends_at:     endsAt,
@@ -190,6 +239,21 @@ export async function updateSessionPrice(
   return data
 }
 
+export async function updateSession(
+  sessionId: string,
+  input: UpdateSessionInput
+): Promise<Session> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .select(`*, child:children(*), teacher:teachers(*)`)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
 export async function deleteSession(sessionId: string): Promise<void> {
   const { error } = await supabase
     .from('sessions')
@@ -212,6 +276,19 @@ export async function deleteAllFutureSessionsInSeries(
   if (error) throw error
 }
 
+export async function deleteSessionsInSeriesFrom(
+  templateId: string,
+  startsAt: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('sessions')
+    .delete()
+    .eq('template_id', templateId)
+    .gte('starts_at', startsAt)
+
+  if (error) throw error
+}
+
 // ─── Helper: generate session dates ──────────────────────────────────────────
 
 function generateSessionDates(
@@ -219,6 +296,7 @@ function generateSessionDates(
   endDate: string,
   dayOfWeek: number,
   timeOfDay: string,    // 'HH:MM:SS'
+  durationMinutes: number,
   rule: 'weekly' | 'biweekly'
 ): Array<{ startsAt: string; endsAt: string }> {
   const [hours, minutes] = timeOfDay.split(':').map(Number)
@@ -235,7 +313,7 @@ function generateSessionDates(
 
   while (current <= end) {
     const sessionStart = setMinutes(setHours(current, hours), minutes)
-    const sessionEnd = new Date(sessionStart.getTime() + 60 * 60 * 1000) // default 1hr
+    const sessionEnd = new Date(sessionStart.getTime() + durationMinutes * 60 * 1000)
 
     dates.push({
       startsAt: sessionStart.toISOString(),

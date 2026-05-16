@@ -9,8 +9,9 @@
 | Phase 3 | Calendar & Sessions | ✅ Done |
 | Phase 4 | Teachers Directory | ✅ Done |
 | Phase 5 | Payments & Statements | ✅ Done |
-| Phase 6 | Profile & Notifications | ⬜ Not started |
+| Phase 6 | Profile & Notifications | ✅ Done |
 | Phase 7 | PWA Polish | ⬜ Not started |
+| Polish | User Journey Polish | 🔄 In progress |
 
 ---
 
@@ -70,7 +71,7 @@ Auth flow: `signInWithGoogle()` → Google consent → redirect back → `onAuth
 
 ---
 
-## 🔄 Phase 3 — Calendar & Sessions (In progress)
+## ✅ Phase 3 — Calendar & Sessions (Done)
 
 **CalendarPage (`/`)** ✅ Built
 - Week title header with prev/next week navigation
@@ -86,6 +87,13 @@ Auth flow: `signInWithGoogle()` → Google consent → redirect back → `onAuth
   - Conflict = amber border + amber bg + "Another student also logged this time"
   - Conflict check runs in parallel for all sessions in the week
 - Empty slot at bottom → "Log an activity" → navigates to /log
+- Session cards are tappable → open event detail sheet
+- Event detail sheet supports:
+  - Mark session complete → updates `sessions.status = 'completed'`
+  - Edit date/time, price, and notes
+  - Delete one-off session
+  - For recurring sessions: delete selected session only, or selected session plus all following sessions in the series
+- Completed sessions show "Completed" state and are included in payment calculations
 
 **LogPage (`/log`) ✅ Built** — 3-step flow
 
@@ -93,25 +101,33 @@ Step 1: Child + Teacher
 - Self-report banner ("You are logging a session you have arranged...")
 - Child selector with avatar initials + active color state
 - Saved teacher list — each a card row with initials avatar + subject + student count
+- Defaults to the first child and first saved teacher when available
 - "Add new teacher" dashed row → inline form (name, subject, location) → creates teacher in community directory + saves to user_teachers
 
 Step 2: Date + Time
-- Mini calendar — month view with prev/next, today circle, selected filled purple
-- Time slot buttons (7 AM–9 PM, 30-min increments, horizontal scroll)
+- Mini calendar — month view with prev/next, today circle, selected outlined purple
+- Manual Start and End time inputs with 15-minute step
+- Quick start-time chips for common after-school times
+- Last session defaults:
+  - Fetches most recent session for selected child+teacher once
+  - Prefills duration/end time from that session
+  - Prefills price from that session
+  - Does not re-query when changing quick-pick times
 - Conflict warning: amber note if another student has teacher at this time
 - Recurring toggle with weekly/biweekly selector
-- End date picker when recurring (max 180 days)
+- End date picker when recurring (min next day, max 180 days)
 - Price per session input
 
 Step 3: Confirm
 - Summary card with child color header, subject + teacher + child label
-- Detail rows: date & time, recurring, location, price
+- Detail rows: date & time, recurring, location, duration, price
 - "Logged by you" tag
 - "Save to my calendar" → `createOneOffSession` or `createRecurringSessions` → navigate to `/`
+- Save errors are shown inline instead of silently staying on the screen
 
 ---
 
-## ⬜ Phase 4 — Teachers Directory
+## ✅ Phase 4 — Teachers Directory
 
 **TeachersPage (`/teachers`)**
 - Search bar ("Search my teachers…") — filters saved teachers only
@@ -124,6 +140,7 @@ Step 3: Confirm
   - "⚠ Another student also logged this time →" conflict chip (tappable)
   - Crowd stats: "12 saved · 3 active"
   - Community vs Verified badge
+- Tabler icon font loaded in `index.html`, fixing missing heart and back-arrow icons
 
 **Discover overlay**
 - Search all teachers in community directory
@@ -138,7 +155,7 @@ Step 3: Confirm
 
 ---
 
-## ⬜ Phase 5 — Payments & Statements
+## ✅ Phase 5 — Payments & Statements
 
 **PaymentsPage (`/payments`)**
 - Balance hero card:
@@ -149,6 +166,8 @@ Step 3: Confirm
   - Payment made vs Prepayment toggle
   - Teacher selector
   - Amount + note
+- Payment and prepayment both store as negative ledger credits
+- Payment form is shared by Payments and Statement views
 - Per-teacher rows (tappable → statement)
   - Icon + name + child + session count
   - Amount + status (Settled / You owe / In credit)
@@ -162,6 +181,37 @@ Step 3: Confirm
   - Session charge: calendar icon, description, +$amount, running balance
   - Payment made: checkmark icon, description, −$amount, running balance
 - "Log a payment" button at bottom
+
+---
+
+## 🔄 User Journey Polish (In progress)
+
+Completed so far:
+- Loaded Tabler Icons stylesheet in `index.html`, restoring missing heart/back/nav icons
+- Fixed log mini-calendar selected-date styling to match the design reference
+- Added event detail sheet from Calendar session cards
+- Added session completion flow using the word "Complete" instead of "Confirm"
+- Separated event details, edit details, completion, and delete actions
+- Added recurring-session delete options:
+  - Delete this activity only
+  - Delete this and following activities
+- Improved log time entry:
+  - Removed dense time-slot rail
+  - Added manual Start and End time inputs
+  - Kept quick start-time chips as shortcuts only
+  - Uses explicit `ends_at` for conflict checks and saved sessions
+- Added child/teacher defaults on Log step 1
+- Added last-session defaults for duration/end time and price
+- Added visible save errors for log flow
+- Fixed project lint config to ignore `.claude/**` worktrees and set stable `tsconfigRootDir`
+
+Current verification status:
+- `npm run build` passes
+- `npm run lint` passes with 4 existing hook dependency warnings:
+  - `PaymentsPage.tsx`
+  - `StatementPage.tsx`
+  - `TeacherDetailPage.tsx`
+  - `TeachersPage.tsx`
 
 ---
 

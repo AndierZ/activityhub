@@ -8,7 +8,6 @@ import {
   saveTeacher,
   unsaveTeacher,
 } from '../lib/db/teachers'
-import { getChildren } from '../lib/db/children'
 import type { Teacher, Child, Session, UserTeacher } from '../types'
 import {
   CHILD_COLORS,
@@ -436,7 +435,6 @@ export function TeachersPage() {
   const navigate = useNavigate()
 
   const [savedTeachers, setSavedTeachers] = useState<UserTeacher[]>([])
-  const [_children, setChildren] = useState<Child[]>([])
   const [upcomingSessions, setUpcomingSessions] = useState<Session[]>([])
   const [conflictMap, setConflictMap] = useState<Record<string, boolean>>({})
   const [searchQuery, setSearchQuery] = useState('')
@@ -457,8 +455,7 @@ export function TeachersPage() {
       const in90 = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)
       const in14 = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
 
-      const [childrenData, savedData, sessionsResult] = await Promise.all([
-        getChildren(user.id),
+      const [savedData, sessionsResult] = await Promise.all([
         getSavedTeachers(user.id),
         supabase
           .from('sessions')
@@ -471,7 +468,6 @@ export function TeachersPage() {
           .lte('starts_at', in90.toISOString()),
       ])
 
-      setChildren(childrenData)
       setSavedTeachers(savedData)
 
       const sessions = (sessionsResult.data ?? []) as unknown as Session[]
@@ -479,12 +475,12 @@ export function TeachersPage() {
 
       // Check conflicts for sessions in next 14 days
       const near = sessions.filter(s => new Date(s.starts_at) <= in14)
-      const teacherIdsToCheck = [...new Set(near.map(s => s.teacher_id))]
+      const teacherIdsToCheck = [...new Set(near.map(s => s.teacher_id).filter((id): id is string => id !== null))]
       const conflicts: Record<string, boolean> = {}
 
       await Promise.all(
         teacherIdsToCheck.map(async tid => {
-          const teacherSessions = near.filter(s => s.teacher_id === tid)
+          const teacherSessions = near.filter(s => s.teacher_id === tid && s.teacher_id !== null)
           for (const sess of teacherSessions) {
             const { data } = await supabase.rpc('check_session_conflict', {
               p_teacher_id: tid,

@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import type { Payment, TeacherBalance, MonthlyStatement, StatementEntry } from '../../types'
+import type { Payment, TeacherBalance, BalanceSummary, MonthlyStatement, StatementEntry } from '../../types'
 
 // ─── Fetching ─────────────────────────────────────────────────────────────────
 
@@ -54,55 +54,21 @@ export async function getBalance(
   }
 }
 
-export async function getAllBalances(userId: string): Promise<TeacherBalance[]> {
-  // Batch 1: discover combos from sessions + payments in parallel
-  const [{ data: sessions, error: sError }, { data: payments, error: pError }] =
-    await Promise.all([
-      supabase.from('sessions').select('child_id, teacher_id').eq('user_id', userId).eq('status', 'completed'),
-      supabase.from('payments').select('child_id, teacher_id').eq('user_id', userId),
-    ])
+export async function getAllBalances(userId: string): Promise<BalanceSummary[]> {
+  const { data, error } = await supabase.rpc('get_all_balances', { p_user_id: userId })
+  if (error) throw error
+  if (!data || data.length === 0) return []
 
-  if (sError) throw sError
-  if (pError) throw pError
-
-  const combos = new Map<string, { child_id: string; teacher_id: string }>()
-  ;[...(sessions ?? []), ...(payments ?? [])].forEach(row => {
-    const key = `${row.child_id}:${row.teacher_id}`
-    if (!combos.has(key)) combos.set(key, row)
-  })
-
-  if (combos.size === 0) return []
-
-  const comboList  = Array.from(combos.values())
-  const childIds   = [...new Set(comboList.map(c => c.child_id))]
-  const teacherIds = [...new Set(comboList.map(c => c.teacher_id))]
-
-  // Batch 2: all balance RPCs + bulk child/teacher fetches — all in parallel
-  const [rpcResults, { data: children }, { data: teachers }] = await Promise.all([
-    Promise.all(
-      comboList.map(({ child_id, teacher_id }) =>
-        supabase.rpc('get_balance', { p_user_id: userId, p_child_id: child_id, p_teacher_id: teacher_id })
-      )
-    ),
-    supabase.from('children').select('*').in('id', childIds),
-    supabase.from('teachers').select('*').in('id', teacherIds),
-  ])
-
-  return comboList
-    .map(({ child_id, teacher_id }, i) => {
-      const raw     = rpcResults[i].data?.[0] ?? { total_owed: 0, total_paid: 0, balance: 0 }
-      const child   = children?.find(c => c.id === child_id)
-      const teacher = teachers?.find(t => t.id === teacher_id)
-      if (!child || !teacher) return null
-      return {
-        child,
-        teacher,
-        total_owed: Number(raw.total_owed),
-        total_paid: Number(raw.total_paid),
-        balance:    Number(raw.balance),
-      }
-    })
-    .filter((b): b is TeacherBalance => b !== null)
+  return (data as Array<{
+    child_id: string; child_name: string; child_display_order: number
+    teacher_id: string; teacher_name: string; teacher_subject: string
+    total_paid: number; balance: number
+  }>).map(row => ({
+    child:   { id: row.child_id,   name: row.child_name,   display_order: row.child_display_order },
+    teacher: { id: row.teacher_id, name: row.teacher_name, subject: row.teacher_subject },
+    total_paid: Number(row.total_paid),
+    balance:    Number(row.balance),
+  }))
 }
 
 // ─── Monthly statement ────────────────────────────────────────────────────────
@@ -125,7 +91,17 @@ export async function getMonthlyStatement(
 
   if (error) throw error
 
-  const entries: StatementEntry[] = (data ?? []).map((row: any) => ({
+  type MonthlyStatementRow = {
+    id: string
+    entry_date: string
+    entry_type: StatementEntry['type']
+    description: string
+    note: string | null
+    amount: number | string
+    running_balance: number | string
+  }
+
+  const entries: StatementEntry[] = ((data ?? []) as MonthlyStatementRow[]).map(row => ({
     id:              row.id,
     date:            row.entry_date,
     type:            row.entry_type,
@@ -185,6 +161,31 @@ export async function logPayment(
 
   if (error) throw error
   return data
+}
+
+export async function updatePayment(
+  paymentId: string,
+  input: { amount?: number; date?: string; note?: string | null }
+): Promise<Payment> {
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (input.amount !== undefined) patch.amount = -Math.abs(input.amount)
+  if (input.date  !== undefined)  patch.date   = input.date
+  if ('note' in input)            patch.note   = input.note ?? null
+
+  const { data, error } = await supabase
+    .from('payments')
+    .update(patch)
+    .eq('id', paymentId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function deletePayment(paymentId: string): Promise<void> {
+  const { error } = await supabase.from('payments').delete().eq('id', paymentId)
+  if (error) throw error
 }
 
 export async function logPrepayment(

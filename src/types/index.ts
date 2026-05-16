@@ -54,7 +54,7 @@ export interface RecurrenceTemplate {
   id: string
   user_id: string
   child_id: string
-  teacher_id: string
+  teacher_id: string | null
   day_of_week: number            // 0=Sun, 1=Mon ... 6=Sat
   time_of_day: string            // '15:00:00'
   price: number
@@ -75,12 +75,13 @@ export interface Session {
   id: string
   user_id: string
   child_id: string
-  teacher_id: string
+  teacher_id: string | null
   template_id: string | null
   starts_at: string              // ISO datetime string
   ends_at: string                // ISO datetime string
   price: number
   status: SessionStatus
+  title: string | null           // set when teacher_id is null; derived from teacher.subject otherwise
   notes: string | null
   created_at: string
   updated_at: string | null
@@ -156,18 +157,29 @@ export function getAge(dateOfBirth: string): number {
 
 export interface CreateSessionInput {
   child_id: string
-  teacher_id: string
+  teacher_id: string | null
+  title?: string | null
   starts_at: string
   ends_at: string
   price: number
   notes?: string
 }
 
+export interface UpdateSessionInput {
+  starts_at?: string
+  ends_at?: string
+  price?: number
+  notes?: string | null
+  status?: SessionStatus
+}
+
 export interface CreateRecurringSessionInput {
   child_id: string
-  teacher_id: string
+  teacher_id: string | null
+  title?: string | null
   day_of_week: number
   time_of_day: string
+  duration_minutes: number
   price: number
   recurrence_rule: RecurrenceRule
   start_date: string
@@ -189,6 +201,14 @@ export interface TeacherBalance {
   total_owed: number           // sum of completed session prices
   total_paid: number           // sum of payment amounts (as positive numbers)
   balance: number              // total_owed - total_paid (positive = you owe)
+}
+
+// Lean shape returned by get_all_balances — only the fields the Payments UI needs
+export interface BalanceSummary {
+  child:   { id: string; name: string; display_order: number }
+  teacher: { id: string; name: string; subject: string }
+  total_paid: number
+  balance: number              // positive = you owe, negative = in credit
 }
 
 export interface ConflictCheckResult {

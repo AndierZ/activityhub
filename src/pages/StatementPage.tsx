@@ -2,19 +2,19 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format, addMonths, subMonths, parseISO } from 'date-fns'
 import { useAuth } from '../hooks/useAuth'
-import { getMonthlyStatement } from '../lib/db/payments'
+import { getMonthlyStatement, updatePayment, deletePayment } from '../lib/db/payments'
 import { getSavedTeachers } from '../lib/db/teachers'
 import { getChildren } from '../lib/db/children'
 import { LogPaymentForm } from './PaymentsPage'
 import {
   getChildColor, CHILD_COLOR_HEX, CHILD_COLOR_BG, getInitials,
 } from '../types'
-import type { MonthlyStatement, Child, UserTeacher } from '../types'
+import type { MonthlyStatement, StatementEntry, Child, UserTeacher } from '../types'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtAmt(n: number): string {
-  return `$${Math.abs(n).toFixed(2)}`
+  return `$${Math.abs(n).toFixed(2).replace(/\.00$/, '')}`
 }
 
 function balanceLabel(n: number): { text: string; color: string } {
@@ -36,6 +36,12 @@ export function StatementPage() {
   const [savedTeachers, setSavedTeachers] = useState<UserTeacher[]>([])
   const [loading,       setLoading]       = useState(true)
   const [showLogForm,   setShowLogForm]   = useState(false)
+  const [editingEntry,  setEditingEntry]  = useState<StatementEntry | null>(null)
+  const [editAmount,    setEditAmount]    = useState('')
+  const [editDate,      setEditDate]      = useState('')
+  const [editNote,      setEditNote]      = useState('')
+  const [editSaving,    setEditSaving]    = useState(false)
+  const [editError,     setEditError]     = useState<string | null>(null)
 
   useEffect(() => {
     if (!user || !childId || !teacherId) return
@@ -81,6 +87,58 @@ export function StatementPage() {
   const opening     = statement?.opening_balance  ?? 0
   const closingInfo = balanceLabel(closing)
   const openingInfo = balanceLabel(opening)
+
+  // ── Payment edit handlers ─────────────────────────────────────────────────────
+
+  function openEditSheet(entry: StatementEntry) {
+    setEditingEntry(entry)
+    setEditAmount(String(Math.abs(entry.amount)))
+    setEditDate(entry.date)
+    setEditNote(entry.note ?? '')
+    setEditError(null)
+  }
+
+  function closeEditSheet() {
+    setEditingEntry(null)
+    setEditSaving(false)
+    setEditError(null)
+  }
+
+  async function handleSaveEdit() {
+    if (!editingEntry) return
+    const amt = parseFloat(editAmount)
+    if (!editAmount || isNaN(amt) || amt <= 0) {
+      setEditError('Enter a valid amount.')
+      return
+    }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await updatePayment(editingEntry.id, {
+        amount: amt,
+        date:   editDate,
+        note:   editNote.trim() || null,
+      })
+      closeEditSheet()
+      loadStatement()
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to save.')
+      setEditSaving(false)
+    }
+  }
+
+  async function handleDeletePayment() {
+    if (!editingEntry) return
+    setEditSaving(true)
+    try {
+      await deletePayment(editingEntry.id)
+      closeEditSheet()
+      loadStatement()
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to delete.')
+      setEditSaving(false)
+    }
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -235,8 +293,9 @@ export function StatementPage() {
                 return (
                   <div
                     key={entry.id}
-                    className="flex items-start gap-3 py-3"
+                    className={`flex items-start gap-3 py-3${isPayment ? ' cursor-pointer' : ''}`}
                     style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none' }}
+                    onClick={isPayment ? () => openEditSheet(entry) : undefined}
                   >
                     {/* Date */}
                     <div
@@ -284,6 +343,11 @@ export function StatementPage() {
                         {fmtAmt(entry.running_balance)} {entry.running_balance !== 0 ? (entry.running_balance > 0 ? 'owed' : 'credit') : 'settled'}
                       </div>
                     </div>
+
+                    {/* Edit affordance for payments only */}
+                    {isPayment && (
+                      <i className="ti ti-chevron-right flex-shrink-0 self-center" style={{ fontSize: 14, color: '#D8D8DC' }} />
+                    )}
                   </div>
                 )
               })}
@@ -317,6 +381,109 @@ export function StatementPage() {
           </button>
         )}
       </div>
+
+      {/* Edit payment bottom sheet */}
+      {editingEntry && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 z-20"
+            style={{ background: 'rgba(0,0,0,0.3)' }}
+            onClick={closeEditSheet}
+          />
+
+          {/* Sheet */}
+          <div
+            className="absolute bottom-0 left-0 right-0 z-30 rounded-t-[20px] pb-8"
+            style={{ background: '#fff', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)' }}
+          >
+            {/* Handle + header */}
+            <div className="flex items-center justify-between px-5 pt-4 pb-3">
+              <div className="text-[15px] font-semibold" style={{ color: '#1A1A2E' }}>
+                Edit payment
+              </div>
+              <button onClick={closeEditSheet} className="p-1">
+                <i className="ti ti-x" style={{ fontSize: 18, color: '#999AAA' }} />
+              </button>
+            </div>
+
+            <div className="px-5 space-y-3">
+              {/* Amount */}
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#999AAA' }}>
+                  Amount
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-[10px]" style={{ border: '0.5px solid #E8E8EC', background: '#F5F5F7' }}>
+                  <span className="text-[15px] font-medium" style={{ color: '#999AAA' }}>$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={editAmount}
+                    onChange={e => setEditAmount(e.target.value)}
+                    className="flex-1 bg-transparent text-[15px] font-medium outline-none"
+                    style={{ color: '#1A1A2E', fontVariantNumeric: 'tabular-nums' }}
+                  />
+                </div>
+              </div>
+
+              {/* Date */}
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#999AAA' }}>
+                  Date
+                </div>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={e => setEditDate(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-[10px] text-[14px] outline-none"
+                  style={{ border: '0.5px solid #E8E8EC', background: '#F5F5F7', color: '#1A1A2E', fontFamily: 'inherit' }}
+                />
+              </div>
+
+              {/* Note */}
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#999AAA' }}>
+                  Note (optional)
+                </div>
+                <input
+                  type="text"
+                  value={editNote}
+                  onChange={e => setEditNote(e.target.value)}
+                  placeholder="e.g. May payment"
+                  className="w-full px-3 py-2.5 rounded-[10px] text-[14px] outline-none"
+                  style={{ border: '0.5px solid #E8E8EC', background: '#F5F5F7', color: '#1A1A2E', fontFamily: 'inherit' }}
+                />
+              </div>
+
+              {editError && (
+                <div className="text-[12px] px-1" style={{ color: '#E24B4A' }}>{editError}</div>
+              )}
+
+              {/* Save */}
+              <button
+                onClick={handleSaveEdit}
+                disabled={editSaving}
+                className="w-full py-3 rounded-[12px] text-[14px] font-semibold text-white"
+                style={{ background: editSaving ? '#B8B0F0' : '#7C6EE6' }}
+              >
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
+
+              {/* Delete */}
+              <button
+                onClick={handleDeletePayment}
+                disabled={editSaving}
+                className="w-full py-3 rounded-[12px] text-[14px] font-semibold"
+                style={{ color: '#E24B4A', border: '0.5px solid #F09595', background: '#fff' }}
+              >
+                Delete payment
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
     </div>
   )
