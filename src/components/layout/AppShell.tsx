@@ -1,6 +1,46 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useAuth } from '../../hooks/useAuth'
+
+function IOSInstallBanner() {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    const isStandalone =
+      ('standalone' in navigator && (navigator as { standalone?: boolean }).standalone) ||
+      window.matchMedia('(display-mode: standalone)').matches
+    const dismissed = localStorage.getItem('ios_install_dismissed') === '1'
+    if (isIOS && !isStandalone && !dismissed) setVisible(true)
+  }, [])
+
+  if (!visible) return null
+
+  function dismiss() {
+    localStorage.setItem('ios_install_dismissed', '1')
+    setVisible(false)
+  }
+
+  return (
+    <div
+      className="flex-shrink-0 flex items-start gap-3 px-4 py-3 mx-3 mb-2 rounded-[14px]"
+      style={{ background: '#EEEBfd', border: '0.5px solid #C8C2F5' }}
+    >
+      <i className="ti ti-share flex-shrink-0 mt-0.5" style={{ fontSize: 18, color: '#7C6EE6' }} />
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-semibold" style={{ color: '#1A1A2E' }}>
+          Add to Home Screen
+        </div>
+        <div className="text-[12px] mt-0.5 leading-snug" style={{ color: '#555566' }}>
+          Tap <i className="ti ti-share" style={{ fontSize: 11 }} /> Share, then <strong>Add to Home Screen</strong> for the full app experience.
+        </div>
+      </div>
+      <button onClick={dismiss} className="flex-shrink-0 p-0.5" aria-label="Dismiss">
+        <i className="ti ti-x" style={{ fontSize: 15, color: '#999AAA' }} />
+      </button>
+    </div>
+  )
+}
 
 interface NavItem {
   path:  string
@@ -38,6 +78,8 @@ export function AppShell({ children }: AppShellProps) {
       <main className="flex-1 overflow-hidden flex flex-col">
         {children}
       </main>
+
+      <IOSInstallBanner />
 
       <nav className="flex-shrink-0 h-20 border-t border-gray-100 bg-white flex items-start pt-2.5">
         {navItems.map(item => {
