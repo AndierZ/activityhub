@@ -445,7 +445,8 @@ function SessionActionSheet({
 // ─── CalendarPage ─────────────────────────────────────────────────────────────
 
 export function CalendarPage() {
-  const { user }   = useAuth()
+  const { user, effectiveUserId } = useAuth()
+  const uid = effectiveUserId ?? user?.id ?? ''
   const navigate   = useNavigate()
 
   const [weekStart, setWeekStart]             = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
@@ -476,7 +477,7 @@ export function CalendarPage() {
 
   useEffect(() => {
     if (!user) return
-    getChildren(user.id).then(setChildren).catch(console.error)
+    getChildren(uid).then(setChildren).catch(console.error)
   }, [user])
 
   // ── Load sessions when week or child filter changes ───────────────────────
@@ -490,7 +491,7 @@ export function CalendarPage() {
     setLoading(true)
     try {
       const data = await getSessionsForWeek(
-        user.id,
+        uid,
         weekStart,
         end,
         selectedChildId ?? undefined,
@@ -501,7 +502,7 @@ export function CalendarPage() {
       const results = await Promise.all(
         data.map(s => (
           s.status === 'scheduled' && s.teacher_id
-            ? checkConflict(s.teacher_id, s.starts_at, s.ends_at, user.id)
+            ? checkConflict(s.teacher_id, s.starts_at, s.ends_at, uid)
             : Promise.resolve({ has_conflict: false, conflicting_sessions_count: 0 })
         ))
       )

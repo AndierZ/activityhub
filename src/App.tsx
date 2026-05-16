@@ -9,6 +9,7 @@ import { PaymentsPage }   from './pages/PaymentsPage'
 import { StatementPage }  from './pages/StatementPage'
 import { ProfilePage }    from './pages/ProfilePage'
 import { AppShell }     from './components/layout/AppShell'
+import { JoinPage }     from './pages/JoinPage'
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth()
@@ -35,8 +36,9 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/*"     element={<ProtectedRoutes />} />
+          <Route path="/login"        element={<LoginPage />} />
+          <Route path="/join/:token"  element={<JoinPage />} />
+          <Route path="/*"            element={<ProtectedRoutes />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

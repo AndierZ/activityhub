@@ -45,7 +45,8 @@ interface LogPaymentFormProps {
 export function LogPaymentForm({
   children, savedTeachers, preChildId, preTeacherId, onSave, onCancel,
 }: LogPaymentFormProps) {
-  const { user } = useAuth()
+  const { user, effectiveUserId } = useAuth()
+  const uid = effectiveUserId ?? user?.id ?? ''
   const [childId,    setChildId]    = useState(preChildId    ?? children[0]?.id    ?? '')
   const [teacherId,  setTeacherId]  = useState(preTeacherId  ?? savedTeachers[0]?.teacher_id ?? '')
   const [amount,     setAmount]     = useState('')
@@ -66,9 +67,9 @@ export function LogPaymentForm({
         note:       note.trim() || undefined,
       }
       if (mode === 'prepayment') {
-        await logPrepayment(user.id, payload)
+        await logPrepayment(uid, payload)
       } else {
-        await logPayment(user.id, payload)
+        await logPayment(uid, payload)
       }
       onSave()
     } catch (err) {
@@ -197,7 +198,8 @@ export function LogPaymentForm({
 // ─── PaymentsPage ─────────────────────────────────────────────────────────────
 
 export function PaymentsPage() {
-  const { user }  = useAuth()
+  const { user, effectiveUserId }  = useAuth()
+  const uid = effectiveUserId ?? user?.id ?? ''
   const navigate  = useNavigate()
 
   const [balances,       setBalances]       = useState<BalanceSummary[]>([])
@@ -220,13 +222,13 @@ export function PaymentsPage() {
       const monthEnd   = addMonths(monthStart, 1)
 
       const [balancesData, childrenData, teachersData, { data: monthPmts }] = await Promise.all([
-        getAllBalances(user.id),
-        getChildren(user.id),
-        getSavedTeachers(user.id),
+        getAllBalances(uid),
+        getChildren(uid),
+        getSavedTeachers(uid),
         supabase
           .from('payments')
           .select('amount')
-          .eq('user_id', user.id)
+          .eq('user_id', uid)
           .gte('date', format(monthStart, 'yyyy-MM-dd'))
           .lt('date',  format(monthEnd,   'yyyy-MM-dd')),
       ])

@@ -13,16 +13,19 @@ interface AuthContextValue {
   user:             User | null
   session:          SupabaseSession | null
   loading:          boolean
-  signInWithGoogle: () => Promise<void>
+  effectiveUserId:  string | null   // primary user's id if linked, else own id
+  refreshLinks:     () => Promise<void>
+  signInWithGoogle: (redirectTo?: string) => Promise<void>
   signOut:          () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser]       = useState<User | null>(null)
-  const [session, setSession] = useState<SupabaseSession | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser]                   = useState<User | null>(null)
+  const [session, setSession]             = useState<SupabaseSession | null>(null)
+  const [loading, setLoading]             = useState(true)
+  const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null)
 
   useEffect(() => {
     // Safety net: if onAuthStateChange hasn't fired within 10s, Supabase is
@@ -59,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             created_at: u.created_at ?? new Date().toISOString(),
             updated_at: null,
           })
+          setEffectiveUserId(u.id)  // default; updated by fetchUserProfile
           setLoading(false)
           // Silently refresh from DB in the background (picks up profile
           // edits the user may have made via the Profile page).
@@ -107,13 +111,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
     } finally {
       setLoading(false)
+      // Resolve effective user id (may differ if this user accepted an invite)
+      await resolveEffectiveUserId(authUser.id)
     }
   }
 
-  async function signInWithGoogle() {
+  async function resolveEffectiveUserId(ownId: string) {
+    try {
+      const { data } = await supabase
+        .from('user_links')
+        .select('primary_user_id')
+        .eq('linked_user_id', ownId)
+        .maybeSingle()
+      setEffectiveUserId(data?.primary_user_id ?? ownId)
+    } catch {
+      setEffectiveUserId(ownId)
+    }
+  }
+
+  async function refreshLinks() {
+    const id = (await supabase.auth.getUser()).data.user?.id
+    if (id) await resolveEffectiveUserId(id)
+  }
+
+  async function signInWithGoogle(redirectTo?: string) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: redirectTo ?? window.location.origin },
     })
     if (error) throw error
   }
@@ -124,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, effectiveUserId, refreshLinks, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   )

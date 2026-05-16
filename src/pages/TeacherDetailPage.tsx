@@ -53,7 +53,8 @@ function timeOfDayToMinutes(t: string): number {
 export function TeacherDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, effectiveUserId } = useAuth()
+  const uid = effectiveUserId ?? user?.id ?? ''
 
   const [teacher, setTeacher] = useState<Teacher | null>(null)
   const [saved, setSaved] = useState(false)
@@ -73,12 +74,12 @@ export function TeacherDetailPage() {
     try {
       const [teacherData, savedData, slotsData, sessionsResult] = await Promise.all([
         getTeacherById(id),
-        isTeacherSaved(user.id, id),
-        getTeacherCrowdsourcedSchedule(id, user.id),
+        isTeacherSaved(uid, id),
+        getTeacherCrowdsourcedSchedule(id, uid),
         supabase
           .from('sessions')
           .select('*, child:children(*)')
-          .eq('user_id', user.id)
+          .eq('user_id', uid)
           .eq('teacher_id', id)
           .eq('status', 'scheduled'),
       ])
@@ -98,10 +99,10 @@ export function TeacherDetailPage() {
     setSavingToggle(true)
     try {
       if (saved) {
-        await unsaveTeacher(user.id, teacher.id)
+        await unsaveTeacher(uid, teacher.id)
         setSaved(false)
       } else {
-        await saveTeacher(user.id, teacher.id)
+        await saveTeacher(uid, teacher.id)
         setSaved(true)
       }
     } catch (err) {

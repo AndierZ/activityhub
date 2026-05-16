@@ -218,11 +218,29 @@ Current verification status:
 ## ✅ Phase 6 — Profile & Notifications (Done)
 
 **ProfilePage (`/profile`)** ✅ Built
-- User hero — initials avatar, name (inline edit), email
-- My children — list with color avatars, age, tap to expand inline edit/delete form; "Add a child" row
+- User hero — avatar (with camera overlay upload), name (inline edit), email
+- My children — list with color avatars, age, tap to expand inline edit/delete form; camera overlay on each child avatar for photo upload; "Add a child" row
+- Shared access section:
+  - Primary user: see linked partners, revoke access, generate invite link (one active at a time)
+  - Linked user: see who they're connected to, disconnect
 - Account section — Name (tappable, editable), Email (read-only, Google auth)
 - Notifications — 3 toggles persisted to localStorage (session reminders, payment reminders, conflict alerts)
 - Sign out button
+
+**Avatar uploads** ✅
+- Supabase Storage bucket `avatars` — public read, write-gated to `{uid}/` folder per user
+- User profile photo and per-child photos stored at `{uid}/user.{ext}` and `{uid}/child-{id}.{ext}`
+- Camera overlay button on all avatars; photo shown instead of initials when set
+
+**Shared access / Partner invite** ✅
+- Invite flow: primary user generates a share link → manually sends it → partner opens `/join/:token`
+- `JoinPage` works pre-login: validates token via SECURITY DEFINER RPC, shows inviter name, prompts Google sign-in with redirect back to the join URL
+- Pre-acceptance checks: blocks if already linked; warns if the joining user has existing data (hidden while connected, restored on disconnect)
+- On acceptance: `user_links` row created; all data queries resolve to primary user via `effective_user_id()` SECURITY DEFINER function
+- One active invitation enforced: generating a new link cancels any existing pending one
+- Invite button hidden once a partner is linked (one linked user per household)
+- Revoke (primary) and disconnect (linked) both remove the `user_links` row
+- Migrations: 013 (storage), 014 (sharing tables + RPCs), 015 (invited_email — later dropped), 016 (fix missing delete policy), 017 (drop invited_email), 018 (grant anon execute on validate_invitation + recreate RPCs), 019 (fix missing user_links table + effective_user_id), 020 (fix ambiguous column in users RLS policy)
 
 ---
 

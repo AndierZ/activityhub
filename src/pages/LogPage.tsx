@@ -47,7 +47,8 @@ function durationBetweenTimeValues(start: string, end: string): number {
 // ─── LogPage ──────────────────────────────────────────────────────────────────
 
 export function LogPage() {
-  const { user } = useAuth()
+  const { user, effectiveUserId } = useAuth()
+  const uid = effectiveUserId ?? user?.id ?? ''
   const navigate  = useNavigate()
 
   const [step, setStep] = useState(1)
@@ -88,8 +89,8 @@ export function LogPage() {
 
   useEffect(() => {
     if (!user) return
-    getChildren(user.id).then(setChildren).catch(console.error)
-    getSavedTeachers(user.id).then(setSavedTeachers).catch(console.error)
+    getChildren(uid).then(setChildren).catch(console.error)
+    getSavedTeachers(uid).then(setSavedTeachers).catch(console.error)
   }, [user])
 
   useEffect(() => {
@@ -117,7 +118,7 @@ export function LogPage() {
     }
 
     let cancelled = false
-    getLatestSessionDefaults(user.id, selectedChildId, selectedTeacher.id)
+    getLatestSessionDefaults(uid, selectedChildId, selectedTeacher.id)
       .then(defaults => {
         if (cancelled) return
         const duration = defaults?.duration_minutes ?? 60
@@ -142,7 +143,7 @@ export function LogPage() {
 
   useEffect(() => {
     if (!user || !selectedTeacher || noTeacher) { setOwnSessions([]); return }
-    getSessionsForDateAndTeacher(user.id, selectedTeacher.id, selectedDate)
+    getSessionsForDateAndTeacher(uid, selectedTeacher.id, selectedDate)
       .then(setOwnSessions)
       .catch(() => setOwnSessions([]))
   }, [user, selectedTeacher, noTeacher, selectedDate])
@@ -168,7 +169,7 @@ export function LogPage() {
       return
     }
 
-    checkConflict(selectedTeacher.id, start.toISOString(), end.toISOString(), user.id)
+    checkConflict(selectedTeacher.id, start.toISOString(), end.toISOString(), uid)
       .then(setConflict)
       .catch(() => setConflict(null))
   }, [selectedTeacher, selectedDate, startTime, endTime, user])
@@ -219,11 +220,11 @@ export function LogPage() {
         subject:  newSubject.trim(),
         location: newLocation.trim() || undefined,
       })
-      await saveTeacher(user.id, teacher.id)
+      await saveTeacher(uid, teacher.id)
       setSavedTeachers(prev => [
         ...prev,
         {
-          id: teacher.id, user_id: user.id, teacher_id: teacher.id,
+          id: teacher.id, user_id: uid, teacher_id: teacher.id,
           notes: null, created_at: new Date().toISOString(), updated_at: null,
           teacher,
         },
@@ -246,7 +247,7 @@ export function LogPage() {
       const teacherId = selectedTeacher?.id ?? null
       const title     = noTeacher ? activityTitle.trim() || null : null
       if (recurring && endDate) {
-        await createRecurringSessions(user.id, {
+        await createRecurringSessions(uid, {
           child_id:         selectedChildId,
           teacher_id:       teacherId,
           title,
@@ -259,7 +260,7 @@ export function LogPage() {
           end_date:         endDate,
         })
       } else {
-        await createOneOffSession(user.id, {
+        await createOneOffSession(uid, {
           child_id:   selectedChildId,
           teacher_id: teacherId,
           title,

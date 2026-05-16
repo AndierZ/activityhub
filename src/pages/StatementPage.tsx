@@ -27,7 +27,8 @@ function balanceLabel(n: number): { text: string; color: string } {
 
 export function StatementPage() {
   const { childId, teacherId } = useParams<{ childId: string; teacherId: string }>()
-  const { user }   = useAuth()
+  const { user, effectiveUserId } = useAuth()
+  const uid = effectiveUserId ?? user?.id ?? ''
   const navigate   = useNavigate()
 
   const [statement,     setStatement]     = useState<MonthlyStatement | null>(null)
@@ -46,8 +47,8 @@ export function StatementPage() {
   useEffect(() => {
     if (!user || !childId || !teacherId) return
     Promise.all([
-      getChildren(user.id).then(setChildren),
-      getSavedTeachers(user.id).then(setSavedTeachers),
+      getChildren(uid).then(setChildren),
+      getSavedTeachers(uid).then(setSavedTeachers),
     ]).catch(console.error)
   }, [user, childId, teacherId])
 
@@ -61,7 +62,7 @@ export function StatementPage() {
     setLoading(true)
     try {
       const data = await getMonthlyStatement(
-        user.id, childId, teacherId,
+        uid, childId, teacherId,
         statMonth.getFullYear(),
         statMonth.getMonth() + 1,
       )

@@ -431,7 +431,8 @@ export function DiscoverOverlay({
 // ─── TeachersPage ─────────────────────────────────────────────────────────────
 
 export function TeachersPage() {
-  const { user } = useAuth()
+  const { user, effectiveUserId } = useAuth()
+  const uid = effectiveUserId ?? user?.id ?? ''
   const navigate = useNavigate()
 
   const [savedTeachers, setSavedTeachers] = useState<UserTeacher[]>([])
@@ -456,13 +457,13 @@ export function TeachersPage() {
       const in14 = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
 
       const [savedData, sessionsResult] = await Promise.all([
-        getSavedTeachers(user.id),
+        getSavedTeachers(uid),
         supabase
           .from('sessions')
           .select(
             'id, teacher_id, child_id, starts_at, ends_at, child:children(id, name, display_order, user_id, date_of_birth, avatar_url, created_at, updated_at)'
           )
-          .eq('user_id', user.id)
+          .eq('user_id', uid)
           .eq('status', 'scheduled')
           .gte('starts_at', now.toISOString())
           .lte('starts_at', in90.toISOString()),
@@ -486,7 +487,7 @@ export function TeachersPage() {
               p_teacher_id: tid,
               p_starts_at: sess.starts_at,
               p_ends_at: sess.ends_at,
-              p_user_id: user.id,
+              p_user_id: uid,
             })
             const result = data?.[0]
             if (result?.has_conflict) {
@@ -526,11 +527,11 @@ export function TeachersPage() {
   async function handleSaveToggle(teacherId: string, save: boolean) {
     if (!user) return
     if (save) {
-      await saveTeacher(user.id, teacherId)
-      const fresh = await getSavedTeachers(user.id)
+      await saveTeacher(uid, teacherId)
+      const fresh = await getSavedTeachers(uid)
       setSavedTeachers(fresh)
     } else {
-      await unsaveTeacher(user.id, teacherId)
+      await unsaveTeacher(uid, teacherId)
       setSavedTeachers(prev => prev.filter(ut => ut.teacher_id !== teacherId))
     }
   }

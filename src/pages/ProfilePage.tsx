@@ -3,6 +3,11 @@ import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { getChildren, createChild, updateChild, deleteChild } from '../lib/db/children'
 import {
+  createInvitation, getMyInvitations, deleteInvitation,
+  getLinkedUsers, getMyLink, revokeLink, disconnectSelf,
+  type InvitationRow, type LinkedUser,
+} from '../lib/db/sharing'
+import {
   getChildColor, CHILD_COLOR_HEX, CHILD_COLOR_BG, getInitials, getAge,
 } from '../types'
 import type { Child } from '../types'
@@ -27,7 +32,8 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 // ─── ProfilePage ──────────────────────────────────────────────────────────────
 
 export function ProfilePage() {
-  const { user, signOut } = useAuth()
+  const { user, effectiveUserId, refreshLinks, signOut } = useAuth()
+  const isLinkedUser = !!user && !!effectiveUserId && effectiveUserId !== user.id
 
   // ── Children ────────────────────────────────────────────────────────────────
   const [children, setChildren]           = useState<Child[]>([])
@@ -55,6 +61,16 @@ export function ProfilePage() {
   const childFileInputRef = useRef<HTMLInputElement>(null)
   const childUploadTargetRef = useRef<string | null>(null)
 
+  // ── Sharing ──────────────────────────────────────────────────────────────────
+  const [invitations, setInvitations]   = useState<InvitationRow[]>([])
+  const [linkedUsers, setLinkedUsers]   = useState<LinkedUser[]>([])
+  const [myLink, setMyLink]             = useState<{ primary_user_id: string; primary_user_name: string | null; primary_user_email: string } | null>(null)
+  const [generatedLink, setGeneratedLink]   = useState<{ id: string; url: string } | null>(null)
+  const [generatingLink, setGeneratingLink] = useState(false)
+  const [generateError, setGenerateError]   = useState<string | null>(null)
+  const [linkCopied, setLinkCopied]         = useState(false)
+  const [disconnecting, setDisconnecting]   = useState(false)
+
   // ── Sign out ─────────────────────────────────────────────────────────────────
   const [signingOut, setSigningOut] = useState(false)
 
@@ -62,14 +78,85 @@ export function ProfilePage() {
 
   useEffect(() => {
     if (!user) return
-    getChildren(user.id).then(setChildren).catch(console.error)
+    getChildren(effectiveUserId ?? user.id).then(setChildren).catch(console.error)
     setDisplayName(user.full_name ?? '')
     setUserAvatarUrl(user.avatar_url ?? null)
-  }, [user])
+
+    if (isLinkedUser) {
+      // Linked user: show who they're connected to
+      getMyLink(user.id).then(setMyLink).catch(console.error)
+    } else {
+      // Primary user: show who's linked to them + pending invitations
+      getLinkedUsers(user.id).then(setLinkedUsers).catch(console.error)
+      getMyInvitations(user.id).then(setInvitations).catch(console.error)
+    }
+  }, [user, effectiveUserId, isLinkedUser])
 
   useEffect(() => { localStorage.setItem('notif_session',  String(notifSession))  }, [notifSession])
   useEffect(() => { localStorage.setItem('notif_payment',  String(notifPayment))  }, [notifPayment])
   useEffect(() => { localStorage.setItem('notif_conflict', String(notifConflict)) }, [notifConflict])
+
+  // ── Sharing handlers ─────────────────────────────────────────────────────────
+
+  async function handleGenerateLink() {
+    if (!user) return
+    setGeneratingLink(true)
+    setGenerateError(null)
+    try {
+      const existing = await getMyInvitations(user.id)
+      await Promise.all(existing.map(inv => deleteInvitation(inv.id)))
+
+      const { id, token } = await createInvitation(user.id)
+      const url = `${window.location.origin}/join/${token}`
+      setGeneratedLink({ id, url })
+      setInvitations([])
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Failed to generate link')
+      console.error(err)
+    } finally {
+      setGeneratingLink(false)
+    }
+  }
+
+  async function handleCopyLink(url: string) {
+    await navigator.clipboard.writeText(url)
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 2000)
+  }
+
+  async function handleCancelInvitation(id: string) {
+    try {
+      await deleteInvitation(id)
+      setInvitations(prev => prev.filter(i => i.id !== id))
+      if (generatedLink?.id === id) setGeneratedLink(null)
+    } catch (err) {
+      console.error('Cancel failed:', err)
+      // Re-sync from DB so the UI reflects actual state
+      if (user) getMyInvitations(user.id).then(setInvitations).catch(console.error)
+    }
+  }
+
+  async function handleRevoke(linkedUserId: string) {
+    if (!user) return
+    await revokeLink(user.id, linkedUserId)
+    setLinkedUsers(prev => prev.filter(u => u.linked_user_id !== linkedUserId))
+  }
+
+  async function handleDisconnect() {
+    if (!user) return
+    setDisconnecting(true)
+    try {
+      await disconnectSelf(user.id)
+      await refreshLinks()
+      setMyLink(null)
+      // Reload children under own account
+      getChildren(user.id).then(setChildren).catch(console.error)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setDisconnecting(false)
+    }
+  }
 
   // ── Avatar upload helpers ────────────────────────────────────────────────────
 
@@ -516,6 +603,170 @@ export function ProfilePage() {
                 </div>
                 <span className="text-[13px]" style={{ color: '#555566' }}>Add a child</span>
               </button>
+            )}
+          </div>
+        </div>
+
+        {/* Shared access */}
+        <div
+          className="px-5 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide"
+          style={{ color: '#999AAA' }}
+        >
+          Shared access
+        </div>
+        <div className="px-5">
+          <div className="rounded-[14px] overflow-hidden" style={{ border: '0.5px solid #E8E8EC' }}>
+
+            {isLinkedUser && myLink ? (
+              /* ── Linked user view ── */
+              <div className="flex items-center gap-3 px-3.5 py-3" style={{ background: '#fff' }}>
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  style={{ background: '#EEEBfd', color: '#7C6EE6' }}
+                >
+                  {(myLink.primary_user_name ?? myLink.primary_user_email)[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
+                    {myLink.primary_user_name ?? myLink.primary_user_email}
+                  </div>
+                  <div className="text-[11px]" style={{ color: '#555566' }}>Connected account</div>
+                </div>
+                <button
+                  onClick={handleDisconnect}
+                  disabled={disconnecting}
+                  className="text-[12px] font-medium px-3 py-1.5 rounded-[8px] flex-shrink-0"
+                  style={{ border: '0.5px solid #F09595', color: '#A32D2D' }}
+                >
+                  {disconnecting ? '…' : 'Disconnect'}
+                </button>
+              </div>
+            ) : (
+              /* ── Primary user view ── */
+              <>
+                {linkedUsers.map((lu) => (
+                  <div
+                    key={lu.linked_user_id}
+                    className="flex items-center gap-3 px-3.5 py-3"
+                    style={{ borderBottom: '0.5px solid #E8E8EC', background: '#fff' }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                      style={{ background: '#EEEBfd', color: '#7C6EE6' }}
+                    >
+                      {(lu.linked_user_name ?? lu.linked_user_email)[0].toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
+                        {lu.linked_user_name ?? lu.linked_user_email}
+                      </div>
+                      <div className="text-[11px]" style={{ color: '#555566' }}>Has shared access</div>
+                    </div>
+                    <button
+                      onClick={() => handleRevoke(lu.linked_user_id)}
+                      className="text-[12px] font-medium px-3 py-1.5 rounded-[8px] flex-shrink-0"
+                      style={{ border: '0.5px solid #F09595', color: '#A32D2D' }}
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+
+                {/* Pending invitations (exclude whichever is shown in the green box) */}
+                {invitations.filter(inv => inv.id !== generatedLink?.id).map(inv => {
+                  const url = `${window.location.origin}/join/${inv.token}`
+                  return (
+                    <div
+                      key={inv.id}
+                      className="px-3.5 py-3"
+                      style={{ borderBottom: '0.5px solid #E8E8EC', background: '#FAFAFA' }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <i className="ti ti-clock" style={{ fontSize: 13, color: '#999AAA' }} />
+                        <span className="text-[12px]" style={{ color: '#555566' }}>Pending invite link</span>
+                        <button
+                          onClick={() => handleCancelInvitation(inv.id)}
+                          className="ml-auto text-[11px] px-2 py-0.5 rounded-[6px]"
+                          style={{ border: '0.5px solid #E8E8EC', color: '#999AAA' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="flex-1 text-[11px] font-mono px-2.5 py-1.5 rounded-[8px] truncate"
+                          style={{ background: '#F5F5F7', color: '#555566' }}
+                        >
+                          {url}
+                        </div>
+                        <button
+                          onClick={() => handleCopyLink(url)}
+                          className="flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-[8px] flex-shrink-0"
+                          style={{ background: '#7C6EE6', color: '#fff' }}
+                        >
+                          <i className={`ti ${linkCopied ? 'ti-check' : 'ti-copy'}`} style={{ fontSize: 12 }} />
+                          {linkCopied ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Generated link (just created) */}
+                {generatedLink && (
+                  <div className="px-3.5 py-3" style={{ background: '#F5FFF9' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[12px] flex-1" style={{ color: '#0F6E56' }}>
+                        Share this link with your partner.
+                      </span>
+                      <button
+                        onClick={() => handleCancelInvitation(generatedLink.id)}
+                        className="text-[11px] px-2 py-0.5 rounded-[6px] flex-shrink-0"
+                        style={{ border: '0.5px solid #B2DFCC', color: '#0F6E56' }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 text-[11px] font-mono px-2.5 py-1.5 rounded-[8px] truncate" style={{ background: '#fff', border: '0.5px solid #D8D8DC', color: '#555566' }}>
+                        {generatedLink.url}
+                      </div>
+                      <button
+                        onClick={() => handleCopyLink(generatedLink.url)}
+                        className="flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-[8px] flex-shrink-0"
+                        style={{ background: '#7C6EE6', color: '#fff' }}
+                      >
+                        <i className={`ti ${linkCopied ? 'ti-check' : 'ti-copy'}`} style={{ fontSize: 12 }} />
+                        {linkCopied ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Invite button */}
+                {linkedUsers.length === 0 && invitations.length === 0 && !generatedLink && (
+                  <div className="px-3.5 py-3" style={{ background: '#fff' }}>
+                    <button
+                      onClick={handleGenerateLink}
+                      disabled={generatingLink}
+                      className="w-full flex items-center gap-3"
+                    >
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ background: '#F5F5F7', border: '0.5px dashed #D8D8DC', color: '#999AAA' }}
+                      >
+                        <i className="ti ti-user-plus" style={{ fontSize: 14 }} />
+                      </div>
+                      <span className="text-[13px]" style={{ color: '#555566' }}>
+                        {generatingLink ? 'Generating…' : 'Invite a partner'}
+                      </span>
+                    </button>
+                    {generateError && (
+                      <div className="text-[11px] mt-2" style={{ color: '#A32D2D' }}>{generateError}</div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

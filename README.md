@@ -10,7 +10,7 @@ Family activity management PWA. Parents log their children's after-school activi
 
 ## Stack
 
-React + TypeScript + Vite + Tailwind CSS v3 + Supabase (Postgres + Auth + RLS) + react-router-dom + date-fns
+React + TypeScript + Vite + Tailwind CSS v3 + Supabase (Postgres + Auth + RLS + Storage) + react-router-dom + date-fns
 
 ---
 
@@ -32,7 +32,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 
 ## Database Schema
 
-7 tables. All private tables use Row Level Security — users can only access their own data. `teachers` is publicly readable by all authenticated users.
+9 tables + 1 storage bucket. All private tables use Row Level Security — users can only access their own data (or their linked partner's data via `effective_user_id()`). `teachers` is publicly readable by all authenticated users.
 
 ### `users`
 Auto-created via trigger when a new auth user signs up.
@@ -114,7 +114,36 @@ Balance formula: `SUM(completed session prices) + SUM(payment amounts)`
 - Negative = you're in credit
 - Zero = settled
 
+### `invitations`
+One-time share tokens. Primary user creates one; partner opens `/join/:token` to accept.
+```
+id, token (uuid — the public-facing join secret), inviter_user_id,
+expires_at (7 days), accepted_at, accepted_by_user_id, created_at
+```
+- Only one pending invitation enforced in the UI (generating a new one cancels any existing)
+- `token` is separate from `id` by design: `id` is the internal key; `token` is the public bearer secret in the URL
+
+### `user_links`
+Records a linked partnership. One primary per linked user (UNIQUE on `linked_user_id`).
+```
+id, primary_user_id, linked_user_id, created_at
+```
+- Primary user owns all data; linked user reads/writes via `effective_user_id()` resolution
+- Deleting this row immediately revokes shared access
+
+### Storage bucket: `avatars`
+Public read, authenticated write restricted to `{uid}/` folder.
+```
+{uid}/user.{ext}         — user profile photo
+{uid}/child-{id}.{ext}   — child photo
+```
+
+---
+
 ### Key RPCs (Postgres functions)
+
+**`effective_user_id()`** `SECURITY DEFINER STABLE`
+Returns the primary user's ID if the caller is a linked user, otherwise `auth.uid()`. Used in all data-table RLS policies so linked users transparently see the primary user's children, sessions, payments, and teachers.
 
 **`check_session_conflict(teacher_id, starts_at, ends_at, user_id)`**
 Returns `{ has_conflict, conflicting_user_count }`. Used before logging a session to warn if another user has this teacher at an overlapping time. Never exposes raw user data.
@@ -124,6 +153,15 @@ Returns `{ total_owed, total_paid, balance }` for a child+teacher combination.
 
 **`get_monthly_statement(user_id, child_id, teacher_id, year, month)`**
 Returns all sessions + payments for a month, interleaved chronologically with running balance. Powers the statement drill-down view.
+
+**`validate_invitation(token uuid)`** `SECURITY DEFINER` — callable by `anon`
+Returns `{ valid, reason, inviter_name, inviter_email }`. Callable without authentication so the join page can show the inviter's name before the visitor logs in.
+
+**`accept_invitation(token uuid)`** `SECURITY DEFINER`
+Validates the token, enforces one-primary-per-linked-user, inserts into `user_links`, and marks the invitation used — all in one atomic transaction.
+
+**`get_user_data_summary(user_id uuid)`** `SECURITY DEFINER`
+Returns `{ children_count, sessions_count }`. Used on the join page to warn a user if they have existing data that will be hidden while linked.
 
 ---
 
