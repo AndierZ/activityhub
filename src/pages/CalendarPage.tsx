@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   startOfWeek, endOfWeek, eachDayOfInterval,
@@ -465,6 +465,14 @@ export function CalendarPage() {
   const [loading, setLoading]                 = useState(true)
   const [selectedSession, setSelectedSession] = useState<Session | null>(null)
 
+  const scrollRef         = useRef<HTMLDivElement>(null)
+  const dayRefs           = useRef<Map<string, HTMLDivElement>>(new Map())
+  const touchStartX       = useRef<number | null>(null)
+  const didSwipe          = useRef(false)
+  const suppressScroll    = useRef(false)
+  // On first load scroll to today; on week nav scroll to the carried-over day
+  const pendingScrollKey  = useRef(format(new Date(), 'yyyy-MM-dd'))
+
   const weekDays = eachDayOfInterval({
     start: weekStart,
     end:   endOfWeek(weekStart, { weekStartsOn: 0 }),
@@ -527,7 +535,6 @@ export function CalendarPage() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  // Activity dot colors for a given day
   function dotColorsForDay(day: Date): string[] {
     const daySessions = sessions.filter(s => isSameDay(parseISO(s.starts_at), day))
     const uniqueChildIds = [...new Set(daySessions.map(s => s.child_id))]
@@ -537,33 +544,96 @@ export function CalendarPage() {
     })
   }
 
-  // Sessions for the selected day, grouped by start hour
-  const daySessions = sessions.filter(s => isSameDay(parseISO(s.starts_at), selectedDate))
+  // All 7 days of the week, each with their sorted sessions
+  const weekGroups = weekDays.map(day => {
+    const key = format(day, 'yyyy-MM-dd')
+    const daySessions = sessions
+      .filter(s => isSameDay(parseISO(s.starts_at), day))
+      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
+    return { day, key, sessions: daySessions }
+  })
 
-  const timelineGroups = (() => {
-    const hourMap = new Map<number, Session[]>()
-    for (const s of daySessions) {
-      const h = parseISO(s.starts_at).getHours()
-      if (!hourMap.has(h)) hourMap.set(h, [])
-      hourMap.get(h)!.push(s)
+  // ── Scroll: feed → strip sync ─────────────────────────────────────────────
+
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+
+    function onScroll() {
+      if (suppressScroll.current) return
+      const containerTop = container.getBoundingClientRect().top
+      const entries = Array.from(dayRefs.current.entries())
+        .map(([key, el]) => ({ key, top: el.getBoundingClientRect().top }))
+        .sort((a, b) => a.top - b.top)
+
+      let activeKey: string | null = null
+      for (const { key, top } of entries) {
+        if (top <= containerTop + 10) activeKey = key
+      }
+      if (!activeKey && entries.length > 0) activeKey = entries[0].key
+      if (activeKey) setSelectedDate(parseISO(activeKey))
     }
-    return Array.from(hourMap.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([hour, hourSessions]) => {
-        const d = new Date(); d.setHours(hour, 0, 0, 0)
-        return { hourLabel: format(d, 'h a'), hourSessions }
-      })
-  })()
+
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [weekStart])
+
+  // ── Scroll to pending date after load ─────────────────────────────────────
+
+  useEffect(() => {
+    if (loading) return
+    const key = pendingScrollKey.current
+    const el  = dayRefs.current.get(key)
+    if (el) {
+      suppressScroll.current = true
+      el.scrollIntoView({ block: 'start' })
+      setTimeout(() => { suppressScroll.current = false }, 150)
+    }
+  }, [loading])
 
   // ── Week navigation ───────────────────────────────────────────────────────
 
   function prevWeek() {
+    const next = subWeeks(selectedDate, 1)
+    pendingScrollKey.current = format(next, 'yyyy-MM-dd')
     setWeekStart(w => subWeeks(w, 1))
-    setSelectedDate(d => subWeeks(d, 1))
+    setSelectedDate(next)
   }
   function nextWeek() {
+    const next = addWeeks(selectedDate, 1)
+    pendingScrollKey.current = format(next, 'yyyy-MM-dd')
     setWeekStart(w => addWeeks(w, 1))
-    setSelectedDate(d => addWeeks(d, 1))
+    setSelectedDate(next)
+  }
+
+  // ── Date tap ──────────────────────────────────────────────────────────────
+
+  function handleDateTap(day: Date) {
+    if (didSwipe.current) { didSwipe.current = false; return }
+    setSelectedDate(day)
+    const key = format(day, 'yyyy-MM-dd')
+    const el  = dayRefs.current.get(key)
+    if (el) {
+      suppressScroll.current = true
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setTimeout(() => { suppressScroll.current = false }, 600)
+    }
+  }
+
+  // ── Swipe on week strip ───────────────────────────────────────────────────
+
+  function onStripTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+    didSwipe.current    = false
+  }
+  function onStripTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return
+    const delta = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
+    if (Math.abs(delta) > 50) {
+      didSwipe.current = true
+      if (delta > 0) prevWeek(); else nextWeek()
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -631,36 +701,30 @@ export function CalendarPage() {
         })}
       </div>
 
-      {/* Week strip */}
-      <div className="flex px-3.5 pb-2 gap-0.5">
+      {/* Week strip — swipeable */}
+      <div
+        className="flex px-3.5 pb-2 gap-0.5"
+        onTouchStart={onStripTouchStart}
+        onTouchEnd={onStripTouchEnd}
+      >
         {weekDays.map(day => {
-          const selected   = isSameDay(day, selectedDate)
-          const today      = isToday(day)
-          const dotColors  = dotColorsForDay(day)
-
+          const selected  = isSameDay(day, selectedDate)
+          const today     = isToday(day)
+          const dotColors = dotColorsForDay(day)
           return (
             <button
               key={day.toISOString()}
-              onClick={() => setSelectedDate(day)}
+              onClick={() => handleDateTap(day)}
               className="flex-1 flex flex-col items-center py-1.5 rounded-xl"
               style={{
                 border:     selected ? '1.5px solid #7C6EE6' : today ? '0.5px solid #E8E8EC' : '0.5px solid transparent',
                 background: today && !selected ? '#F5F5F7' : 'transparent',
               }}
             >
-              <span
-                className="text-[9px] font-semibold uppercase tracking-wide"
-                style={{ color: selected ? '#7C6EE6' : '#999AAA' }}
-              >
+              <span className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: selected ? '#7C6EE6' : '#999AAA' }}>
                 {format(day, 'EEE')}
               </span>
-              <span
-                className="text-sm mt-0.5"
-                style={{
-                  color:      selected ? '#7C6EE6' : '#1A1A2E',
-                  fontWeight: selected ? 700 : 600,
-                }}
-              >
+              <span className="text-sm mt-0.5" style={{ color: selected ? '#7C6EE6' : '#1A1A2E', fontWeight: selected ? 700 : 600 }}>
                 {format(day, 'd')}
               </span>
               <div className="flex justify-center mt-0.5 h-2 items-center">
@@ -671,55 +735,72 @@ export function CalendarPage() {
         })}
       </div>
 
-      {/* Timeline */}
-      <div className="flex-1 overflow-y-auto px-5 pb-4">
+      {/* Full-week feed */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
         {loading ? (
           <div className="flex items-center justify-center pt-10">
             <span className="text-[13px]" style={{ color: '#999AAA' }}>Loading…</span>
           </div>
         ) : (
           <>
-            {timelineGroups.map(({ hourLabel, hourSessions }) => (
-              <div key={hourLabel} className="flex gap-2.5 mb-0.5">
+            {weekGroups.map(({ day, key, sessions: daySessions }) => (
+              <div
+                key={key}
+                ref={el => { if (el) dayRefs.current.set(key, el); else dayRefs.current.delete(key) }}
+              >
+                {/* Sticky day header */}
                 <div
-                  className="text-[10px] font-medium w-8 flex-shrink-0 pt-2.5"
-                  style={{ color: '#999AAA' }}
+                  className="px-5 py-2 flex items-center gap-2"
+                  style={{
+                    position:    'sticky',
+                    top:         0,
+                    background:  '#fff',
+                    zIndex:      1,
+                    borderBottom: '0.5px solid #E8E8EC',
+                    borderLeft:  isSameDay(day, selectedDate) ? '3px solid #7C6EE6' : '3px solid transparent',
+                  }}
                 >
-                  {hourLabel}
+                  <span className="text-[12px] font-semibold" style={{ color: isSameDay(day, selectedDate) ? '#7C6EE6' : '#1A1A2E' }}>
+                    {format(day, 'EEE, MMM d')}
+                  </span>
+                  {isToday(day) && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: '#EEEBfd', color: '#7C6EE6' }}>
+                      Today
+                    </span>
+                  )}
                 </div>
-                <div
-                  className="flex-1 pt-2 pb-2.5"
-                  style={{ borderTop: '0.5px solid #E8E8EC' }}
-                >
-                  {hourSessions.map(s => (
-                    <SessionBlock
-                      key={s.id}
-                      session={s}
-                      allChildren={children}
-                      hasConflict={conflictMap.get(s.id) ?? false}
-                      onSelect={setSelectedSession}
-                    />
-                  ))}
+
+                {/* Sessions or empty state */}
+                <div className="px-5 py-2">
+                  {daySessions.length > 0 ? (
+                    daySessions.map(s => (
+                      <SessionBlock
+                        key={s.id}
+                        session={s}
+                        allChildren={children}
+                        hasConflict={conflictMap.get(s.id) ?? false}
+                        onSelect={setSelectedSession}
+                      />
+                    ))
+                  ) : (
+                    <div className="py-2 text-[12px]" style={{ color: '#C8C8D0' }}>
+                      No sessions
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
 
             {/* Log prompt */}
-            <div className="flex gap-2.5">
-              <div className="w-8 flex-shrink-0" />
-              <div
-                className="flex-1 pt-2 pb-2.5"
-                style={{ borderTop: timelineGroups.length > 0 ? '0.5px solid #E8E8EC' : 'none' }}
+            <div className="px-5 pt-2 pb-2">
+              <button
+                onClick={() => navigate('/log')}
+                className="w-full rounded-[10px] px-2.5 py-2.5 text-xs flex items-center justify-center gap-1"
+                style={{ border: '0.5px dashed #E8E8EC', color: '#999AAA' }}
               >
-                <button
-                  onClick={() => navigate('/log')}
-                  className="w-full rounded-[10px] px-2.5 py-2.5 text-xs flex items-center justify-center gap-1"
-                  style={{ border: '0.5px dashed #E8E8EC', color: '#999AAA' }}
-                >
-                  <i className="ti ti-plus text-[13px]" />
-                  Log an activity
-                </button>
-              </div>
+                <i className="ti ti-plus text-[13px]" />
+                Log an activity
+              </button>
             </div>
           </>
         )}
