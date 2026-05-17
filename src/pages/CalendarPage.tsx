@@ -546,13 +546,9 @@ export function CalendarPage() {
     const startX = dir === 'prev' ? '-100%' : '100%'
     strip.style.transition = 'none'
     strip.style.transform  = `translateX(${startX})`
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        strip.style.transition = 'transform 260ms ease-out'
-        strip.style.transform  = 'translateX(0)'
-      })
-    })
+    void strip.offsetWidth  // force reflow so iOS Safari sees the initial position
+    strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+    strip.style.transform  = 'translateX(0)'
   }, [weekStart])
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -617,17 +613,17 @@ export function CalendarPage() {
 
   function prevWeek() {
     pendingSlideDir.current = 'prev'
-    const next = subWeeks(selectedDate, 1)
-    pendingScrollKey.current = format(next, 'yyyy-MM-dd')
-    setWeekStart(w => subWeeks(w, 1))
-    setSelectedDate(next)
+    const newStart = subWeeks(weekStart, 1)
+    pendingScrollKey.current = format(newStart, 'yyyy-MM-dd')
+    setWeekStart(newStart)
+    setSelectedDate(newStart)
   }
   function nextWeek() {
     pendingSlideDir.current = 'next'
-    const next = addWeeks(selectedDate, 1)
-    pendingScrollKey.current = format(next, 'yyyy-MM-dd')
-    setWeekStart(w => addWeeks(w, 1))
-    setSelectedDate(next)
+    const newStart = addWeeks(weekStart, 1)
+    pendingScrollKey.current = format(newStart, 'yyyy-MM-dd')
+    setWeekStart(newStart)
+    setSelectedDate(newStart)
   }
 
   // ── Date tap ──────────────────────────────────────────────────────────────
@@ -662,21 +658,15 @@ export function CalendarPage() {
     if (touchStartX.current === null) return
     const delta = e.changedTouches[0].clientX - touchStartX.current
     touchStartX.current = null
-    const strip = stripRef.current
 
     if (Math.abs(delta) > 50) {
       didSwipe.current = true
-      if (strip) {
-        const exitX = delta > 0 ? '100%' : '-100%'
-        strip.style.transition = 'transform 200ms ease-in'
-        strip.style.transform  = `translateX(${exitX})`
-      }
-      // Wait for exit animation, then switch week (useLayoutEffect handles entry)
-      setTimeout(() => {
-        if (delta > 0) prevWeek(); else nextWeek()
-      }, 200)
+      // Navigate immediately — useLayoutEffect will snap strip to the entry
+      // position and animate it in before the first paint, so the drag-position
+      // jump is invisible to the user.
+      if (delta > 0) prevWeek(); else nextWeek()
     } else {
-      // Snap back if not a committed swipe
+      const strip = stripRef.current
       if (strip) {
         strip.style.transition = 'transform 180ms ease-out'
         strip.style.transform  = 'translateX(0)'
@@ -762,6 +752,7 @@ export function CalendarPage() {
       <div
         ref={stripRef}
         className="flex px-3.5 pb-2 gap-0.5"
+        style={{ willChange: 'transform' }}
         onTouchStart={onStripTouchStart}
         onTouchMove={onStripTouchMove}
         onTouchEnd={onStripTouchEnd}
