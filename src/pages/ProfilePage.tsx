@@ -52,7 +52,6 @@ export function ProfilePage() {
   // ── Notifications (localStorage) ────────────────────────────────────────────
   const [notifSession,  setNotifSession]  = useState(() => localStorage.getItem('notif_session')  !== 'false')
   const [notifPayment,  setNotifPayment]  = useState(() => localStorage.getItem('notif_payment')  !== 'false')
-  const [notifConflict, setNotifConflict] = useState(() => localStorage.getItem('notif_conflict') === 'true')
 
   // ── Avatar upload ────────────────────────────────────────────────────────────
   const [userAvatarUrl, setUserAvatarUrl]         = useState<string | null>(user?.avatar_url ?? null)
@@ -107,7 +106,6 @@ export function ProfilePage() {
 
   useEffect(() => { localStorage.setItem('notif_session',  String(notifSession))  }, [notifSession])
   useEffect(() => { localStorage.setItem('notif_payment',  String(notifPayment))  }, [notifPayment])
-  useEffect(() => { localStorage.setItem('notif_conflict', String(notifConflict)) }, [notifConflict])
 
   // ── Sharing handlers ─────────────────────────────────────────────────────────
 
@@ -952,12 +950,6 @@ export function ProfilePage() {
                 sub:   'When overdue',
                 value: notifPayment,
                 set:   setNotifPayment,
-              },
-              {
-                label: 'Conflict alerts',
-                sub:   'Crowdsourced warnings',
-                value: notifConflict,
-                set:   setNotifConflict,
               },
             ].map((item, i) => (
               <div

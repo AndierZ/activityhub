@@ -1,11 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import {
   startOfWeek, endOfWeek, eachDayOfInterval,
   format, isSameDay, isToday, parseISO,
   addWeeks, subWeeks,
 } from 'date-fns'
 import { useAuth } from '../hooks/useAuth'
-import { getTeacherWeekSessions, type TeacherSessionRow } from '../lib/db/teachers'
+import {
+  getTeacherWeekSessions,
+  getTeacherNextSessions,
+  type TeacherSessionRow,
+} from '../lib/db/teachers'
 import { confirmSession, unconfirmSession } from '../lib/db/sessions'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -20,26 +24,46 @@ function fmtPrice(price: number): string {
 
 // ─── Session card ─────────────────────────────────────────────────────────────
 
+function sessionsOverlap(a: TeacherSessionRow, b: TeacherSessionRow): boolean {
+  return a.starts_at < b.ends_at && a.ends_at > b.starts_at
+}
+
+function buildConflictIds(sessions: TeacherSessionRow[]): Set<string> {
+  const ids = new Set<string>()
+  for (let i = 0; i < sessions.length; i++) {
+    for (let j = i + 1; j < sessions.length; j++) {
+      if (sessionsOverlap(sessions[i], sessions[j])) {
+        ids.add(sessions[i].id)
+        ids.add(sessions[j].id)
+      }
+    }
+  }
+  return ids
+}
+
 function SessionCard({
   session,
+  hasConflict,
   onSelect,
   onConfirm,
   onUnconfirm,
 }: {
   session: TeacherSessionRow
+  hasConflict: boolean
   onSelect: (s: TeacherSessionRow) => void
   onConfirm: (id: string) => void
   onUnconfirm: (id: string) => void
 }) {
-  const confirmed  = !!session.teacher_confirmed_at
-  const completed  = session.status === 'completed'
+  const confirmed = !!session.teacher_confirmed_at
+  const completed = session.status === 'completed'
 
   return (
     <div
       className="rounded-[10px] px-3 py-2.5 mb-2 flex items-center gap-2"
-      style={{ background: '#EEEBfd', borderLeft: '3px solid #7C6EE6' }}
+      style={hasConflict
+        ? { background: '#FEF8EC', border: '1px solid #E8A838', borderLeft: '3px solid #E8A838' }
+        : { background: '#EEEBfd', borderLeft: '3px solid #7C6EE6' }}
     >
-      {/* Tap target for detail */}
       <button className="flex-1 text-left min-w-0" onClick={() => onSelect(session)}>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-[13px]" style={{ color: '#1A1A2E' }}>
@@ -60,11 +84,17 @@ function SessionCard({
         <div className="text-[12px] mt-0.5" style={{ color: '#555566' }}>
           {fmtTimeRange(session.starts_at, session.ends_at)}
         </div>
+        {hasConflict && (
+          <div className="flex items-center gap-1 mt-1 text-[11px]" style={{ color: '#B87A10' }}>
+            <i className="ti ti-alert-triangle" style={{ fontSize: 11 }} />
+            Overlaps with another student
+          </div>
+        )}
       </button>
 
       {!confirmed ? (
         <button
-          onClick={(e) => { e.stopPropagation(); onConfirm(session.id) }}
+          onClick={e => { e.stopPropagation(); onConfirm(session.id) }}
           className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
           style={{ background: '#7C6EE6', color: '#fff' }}
         >
@@ -73,7 +103,7 @@ function SessionCard({
         </button>
       ) : (
         <button
-          onClick={(e) => { e.stopPropagation(); onUnconfirm(session.id) }}
+          onClick={e => { e.stopPropagation(); onUnconfirm(session.id) }}
           className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
           style={{ background: '#fff', color: '#999AAA', border: '0.5px solid #E8E8EC' }}
         >
@@ -89,11 +119,13 @@ function SessionCard({
 
 function DetailSheet({
   session,
+  hasConflict,
   onClose,
   onConfirm,
   onUnconfirm,
 }: {
   session: TeacherSessionRow
+  hasConflict: boolean
   onClose: () => void
   onConfirm: (id: string) => void
   onUnconfirm: (id: string) => void
@@ -122,9 +154,9 @@ function DetailSheet({
         </div>
 
         <div className="space-y-3 mb-5">
-          <SheetRow icon="ti-clock"            label="Time"   value={fmtTimeRange(session.starts_at, session.ends_at)} />
-          <SheetRow icon="ti-calendar"          label="Date"   value={format(parseISO(session.starts_at), 'EEEE, MMMM d, yyyy')} />
-          <SheetRow icon="ti-currency-dollar"   label="Rate"   value={fmtPrice(session.price)} />
+          <SheetRow icon="ti-clock"          label="Time"   value={fmtTimeRange(session.starts_at, session.ends_at)} />
+          <SheetRow icon="ti-calendar"        label="Date"   value={format(parseISO(session.starts_at), 'EEEE, MMMM d, yyyy')} />
+          <SheetRow icon="ti-currency-dollar" label="Rate"   value={fmtPrice(session.price)} />
           <SheetRow
             icon="ti-circle-check"
             label="Status"
@@ -134,7 +166,14 @@ function DetailSheet({
           {session.notes && <SheetRow icon="ti-notes" label="Notes" value={session.notes} />}
         </div>
 
-        {!confirmed && (
+        {hasConflict && (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-[10px] mb-4 text-[12px]" style={{ background: '#FEF8EC', border: '1px solid #E8A838', color: '#B87A10' }}>
+            <i className="ti ti-alert-triangle flex-shrink-0" style={{ fontSize: 14 }} />
+            This slot overlaps with another student's session.
+          </div>
+        )}
+
+        {!confirmed ? (
           <button
             onClick={() => { onConfirm(session.id); onClose() }}
             className="w-full py-3 rounded-[12px] text-[14px] font-semibold flex items-center justify-center gap-2 mb-3"
@@ -143,9 +182,7 @@ function DetailSheet({
             <i className="ti ti-check" style={{ fontSize: 15 }} />
             Confirm this session
           </button>
-        )}
-
-        {confirmed && (
+        ) : (
           <button
             onClick={() => { onUnconfirm(session.id); onClose() }}
             className="w-full py-3 rounded-[12px] text-[14px] font-semibold flex items-center justify-center gap-2 mb-3"
@@ -187,80 +224,233 @@ function SheetRow({ icon, label, value, valueColor = '#1A1A2E' }: { icon: string
 export function MySchedulePage() {
   const { claimedTeacher } = useAuth()
 
-  const [weekBase, setWeekBase]       = useState(new Date())
-  const [sessions, setSessions]       = useState<TeacherSessionRow[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [selectedDay, setSelectedDay] = useState(new Date())
-  const [selected, setSelected]       = useState<TeacherSessionRow | null>(null)
+  // ── Core state ──────────────────────────────────────────────────────────────
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
+  const [sessions,  setSessions]  = useState<TeacherSessionRow[]>([])
+  const [loading,   setLoading]   = useState(true)
+  const [selected,  setSelected]  = useState<TeacherSessionRow | null>(null)
 
-  const weekStart = startOfWeek(weekBase, { weekStartsOn: 1 })
-  const weekEnd   = endOfWeek(weekBase,   { weekStartsOn: 1 })
-  const days      = eachDayOfInterval({ start: weekStart, end: weekEnd })
+  // ── Display state (lags behind fetch so feed stays visible during load) ─────
+  const [dispWeekStart,       setDispWeekStart]       = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
+  const [dispSessions,        setDispSessions]        = useState<TeacherSessionRow[]>([])
+  const [dispNextWeekSessions, setDispNextWeekSessions] = useState<TeacherSessionRow[]>([])
+  const [dispNextWeekStart,   setDispNextWeekStart]   = useState<Date | null>(null)
+  const [feedKey,       setFeedKey]       = useState(0)
+  const [feedAnimStyle, setFeedAnimStyle] = useState('none')
 
+  // ── Refs ────────────────────────────────────────────────────────────────────
+  const stripRef                = useRef<HTMLDivElement>(null)
+  const touchStartX             = useRef<number | null>(null)
+  const didSwipe                = useRef(false)
+  const isAnimating             = useRef(false)
+  const feedSlideDir            = useRef<'prev' | 'next' | null>(null)
+  const pendingNextWeekSessions = useRef<TeacherSessionRow[]>([])
+  const pendingNextWeekStart    = useRef<Date | null>(null)
+  const initialLoadDone         = useRef(false)
+
+  // ── Derived ─────────────────────────────────────────────────────────────────
+  const weekEnd      = endOfWeek(weekStart, { weekStartsOn: 0 })
+  const weekDays     = eachDayOfInterval({ start: weekStart, end: weekEnd })
+  const prevWeekDays = eachDayOfInterval({ start: subWeeks(weekStart, 1), end: endOfWeek(subWeeks(weekStart, 1), { weekStartsOn: 0 }) })
+  const nextWeekDays = eachDayOfInterval({ start: addWeeks(weekStart, 1), end: endOfWeek(addWeeks(weekStart, 1), { weekStartsOn: 0 }) })
+
+  const weekLabel = (() => {
+    const sm = format(weekStart, 'MMM')
+    const em = format(weekEnd,   'MMM')
+    return sm === em
+      ? `${sm} ${format(weekStart, 'd')}–${format(weekEnd, 'd')} ${format(weekEnd, 'yyyy')}`
+      : `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d yyyy')}`
+  })()
+
+  // ── Load sessions ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!claimedTeacher) return
     setLoading(true)
-    getTeacherWeekSessions(claimedTeacher.id, weekStart, weekEnd)
-      .then(setSessions)
+    Promise.all([
+      getTeacherWeekSessions(claimedTeacher.id, weekStart, weekEnd),
+      getTeacherNextSessions(claimedTeacher.id, weekEnd, 50),
+    ])
+      .then(([data, upcoming]) => {
+        setSessions(data)
+        if (upcoming.length > 0) {
+          const firstDate = parseISO(upcoming[0].starts_at)
+          const nwStart   = startOfWeek(firstDate, { weekStartsOn: 0 })
+          const nwEnd     = endOfWeek(firstDate,   { weekStartsOn: 0 })
+          pendingNextWeekStart.current    = nwStart
+          pendingNextWeekSessions.current = upcoming.filter(s => {
+            const d = parseISO(s.starts_at)
+            return d >= nwStart && d <= nwEnd
+          })
+        } else {
+          pendingNextWeekStart.current    = null
+          pendingNextWeekSessions.current = []
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claimedTeacher?.id, weekBase])
+  }, [claimedTeacher?.id, weekStart])
 
+  // ── Carousel reset ───────────────────────────────────────────────────────────
+  useLayoutEffect(() => {
+    const strip = stripRef.current
+    if (!strip) return
+    strip.style.transition = 'none'
+    strip.style.transform  = 'translateX(-33.333%)'
+  }, [weekStart])
+
+  // ── Commit display state when data arrives ───────────────────────────────────
+  useEffect(() => {
+    if (loading) return
+    const isFirst = !initialLoadDone.current
+    initialLoadDone.current = true
+    const dir = feedSlideDir.current
+    feedSlideDir.current = null
+    setDispWeekStart(weekStart)
+    setDispSessions(sessions)
+    setDispNextWeekSessions(pendingNextWeekSessions.current)
+    setDispNextWeekStart(pendingNextWeekStart.current)
+    setFeedAnimStyle(
+      isFirst        ? 'feedFadeIn 220ms ease-out' :
+      dir === 'next' ? 'feedSlideNext 320ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' :
+      dir === 'prev' ? 'feedSlidePrev 320ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' :
+                       'feedFadeIn 220ms ease-out'
+    )
+    setFeedKey(k => k + 1)
+  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Week navigation ──────────────────────────────────────────────────────────
+  function jumpToWeek(target: Date) {
+    if (isAnimating.current) return
+    feedSlideDir.current = 'next'
+    setWeekStart(target)
+  }
+
+  function navigateWeek(dir: 'prev' | 'next') {
+    if (isAnimating.current) return
+    isAnimating.current  = true
+    feedSlideDir.current = dir
+    const newStart = dir === 'prev' ? subWeeks(weekStart, 1) : addWeeks(weekStart, 1)
+    const strip = stripRef.current
+    if (strip) {
+      strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+      strip.style.transform  = dir === 'prev' ? 'translateX(0%)' : 'translateX(-66.666%)'
+    }
+    setTimeout(() => {
+      isAnimating.current = false
+      setWeekStart(newStart)
+    }, 300)
+  }
+
+  // ── Touch handlers ───────────────────────────────────────────────────────────
+  function onStripTouchStart(e: React.TouchEvent) {
+    if (isAnimating.current) return
+    touchStartX.current = e.touches[0].clientX
+    didSwipe.current    = false
+  }
+  function onStripTouchMove(e: React.TouchEvent) {
+    if (touchStartX.current === null || isAnimating.current) return
+    const delta = e.touches[0].clientX - touchStartX.current
+    const strip = stripRef.current
+    if (!strip) return
+    strip.style.transition = 'none'
+    strip.style.transform  = `translateX(calc(-33.333% + ${delta}px))`
+  }
+  function onStripTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return
+    const delta = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
+    if (Math.abs(delta) > 50) {
+      didSwipe.current = true
+      navigateWeek(delta > 0 ? 'prev' : 'next')
+    } else {
+      if (Math.abs(delta) > 10) didSwipe.current = true
+      const strip = stripRef.current
+      if (strip) {
+        strip.style.transition = 'transform 180ms ease-out'
+        strip.style.transform  = 'translateX(-33.333%)'
+      }
+    }
+  }
+  function onStripTouchCancel() {
+    touchStartX.current = null
+    const strip = stripRef.current
+    if (!strip) return
+    strip.style.transition = 'transform 180ms ease-out'
+    strip.style.transform  = 'translateX(-33.333%)'
+  }
+
+  // ── Confirm / unconfirm (optimistic) ─────────────────────────────────────────
   async function handleConfirm(sessionId: string) {
-    const now = new Date().toISOString()
-    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: now } : s))
+    const now   = new Date().toISOString()
+    const patch = (arr: TeacherSessionRow[]) =>
+      arr.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: now } : s)
+    setSessions(patch)
+    setDispSessions(patch)
     if (selected?.id === sessionId) setSelected(s => s ? { ...s, teacher_confirmed_at: now } : s)
     try {
       await confirmSession(sessionId)
     } catch (err) {
       console.error('confirm_session failed:', err)
-      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: null } : s))
+      const revert = (arr: TeacherSessionRow[]) =>
+        arr.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: null } : s)
+      setSessions(revert)
+      setDispSessions(revert)
     }
   }
 
   async function handleUnconfirm(sessionId: string) {
-    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: null } : s))
+    const patch = (arr: TeacherSessionRow[]) =>
+      arr.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: null } : s)
+    setSessions(patch)
+    setDispSessions(patch)
     if (selected?.id === sessionId) setSelected(s => s ? { ...s, teacher_confirmed_at: null } : s)
     try {
       await unconfirmSession(sessionId)
     } catch (err) {
       console.error('unconfirm_session failed:', err)
-      const now = new Date().toISOString()
-      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: now } : s))
+      const now    = new Date().toISOString()
+      const revert = (arr: TeacherSessionRow[]) =>
+        arr.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: now } : s)
+      setSessions(revert)
+      setDispSessions(revert)
     }
   }
 
-  const dayHasSessions = (day: Date) => sessions.some(s => isSameDay(parseISO(s.starts_at), day))
-  const dayUnconfirmedCount = (day: Date) => sessions.filter(s => isSameDay(parseISO(s.starts_at), day) && !s.teacher_confirmed_at).length
+  // ── Strip helpers ────────────────────────────────────────────────────────────
+  function dayHasSessions(day: Date)    { return sessions.some(s => isSameDay(parseISO(s.starts_at), day)) }
+  function dayHasUnconfirmed(day: Date) { return sessions.some(s => isSameDay(parseISO(s.starts_at), day) && !s.teacher_confirmed_at) }
 
-  const dayLabel = isToday(selectedDay)
-    ? `Today, ${format(selectedDay, 'MMMM d')}`
-    : format(selectedDay, 'EEEE, MMMM d')
+  // ── Feed groups ──────────────────────────────────────────────────────────────
+  const dispWeekGroups = eachDayOfInterval({
+    start: dispWeekStart,
+    end:   endOfWeek(dispWeekStart, { weekStartsOn: 0 }),
+  })
+    .map(day => ({
+      day,
+      sessions: dispSessions
+        .filter(s => isSameDay(parseISO(s.starts_at), day))
+        .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
+    }))
+    .filter(g => g.sessions.length > 0)
 
-  const daySessions = sessions
-    .filter(s => isSameDay(parseISO(s.starts_at), selectedDay))
-    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+  const totalUnconfirmed = dispSessions.filter(s => !s.teacher_confirmed_at).length
+  const conflictIds      = buildConflictIds([...dispSessions, ...dispNextWeekSessions])
 
-  const weekTitle = `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`
-
-  const totalUnconfirmed = sessions.filter(s => !s.teacher_confirmed_at).length
-
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full overflow-hidden" style={{ background: '#F5F5F7' }}>
+    <div className="flex flex-col h-full overflow-hidden">
+      <style>{`
+        @keyframes feedFadeIn    { from { opacity: 0 }                               to { opacity: 1 } }
+        @keyframes feedSlideNext { from { opacity: 0.7; transform: translateY(28px) } to { opacity: 1; transform: none } }
+        @keyframes feedSlidePrev { from { opacity: 0.7; transform: translateY(-28px) } to { opacity: 1; transform: none } }
+        @keyframes comingUpFade  { from { opacity: 0 }                               to { opacity: 1 } }
+      `}</style>
 
       {/* Header */}
-      <div className="flex-shrink-0 px-5 pt-4 pb-3" style={{ background: '#fff', borderBottom: '0.5px solid #E8E8EC' }}>
+      <div className="flex-shrink-0 px-5 pt-4 pb-2" style={{ borderBottom: '0.5px solid #E8E8EC' }}>
         <div className="flex items-center justify-between">
-          <div>
-            <div className="font-serif text-[22px] leading-tight" style={{ color: '#1A1A2E' }}>My Schedule</div>
-            {claimedTeacher && (
-              <div className="text-[12px]" style={{ color: '#999AAA' }}>
-                {claimedTeacher.name} · {claimedTeacher.subject}
-              </div>
-            )}
-          </div>
-          {/* Pending confirmations badge */}
+          <div className="font-serif text-[22px] leading-tight" style={{ color: '#1A1A2E' }}>Calendar</div>
           {!loading && totalUnconfirmed > 0 && (
             <div
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
@@ -271,102 +461,183 @@ export function MySchedulePage() {
             </div>
           )}
         </div>
+        {claimedTeacher && (
+          <div className="text-[12px] mt-0.5" style={{ color: '#999AAA' }}>
+            {claimedTeacher.name} · {claimedTeacher.subject}
+          </div>
+        )}
       </div>
 
-      {/* Week strip */}
-      <div className="flex-shrink-0 px-4 pt-3 pb-2" style={{ background: '#fff', borderBottom: '0.5px solid #E8E8EC' }}>
-        <div className="flex items-center justify-between mb-2.5">
-          <button
-            onClick={() => { setWeekBase(w => subWeeks(w, 1)); setSelectedDay(d => subWeeks(d, 1)) }}
-            className="w-7 h-7 flex items-center justify-center rounded-full"
-            style={{ background: '#F5F5F7' }}
-          >
-            <i className="ti ti-chevron-left" style={{ fontSize: 14, color: '#555566' }} />
-          </button>
-          <span className="text-[12px] font-medium" style={{ color: '#555566' }}>{weekTitle}</span>
-          <button
-            onClick={() => { setWeekBase(w => addWeeks(w, 1)); setSelectedDay(d => addWeeks(d, 1)) }}
-            className="w-7 h-7 flex items-center justify-center rounded-full"
-            style={{ background: '#F5F5F7' }}
-          >
-            <i className="ti ti-chevron-right" style={{ fontSize: 14, color: '#555566' }} />
-          </button>
-        </div>
+      {/* Week nav */}
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-2">
+        <button
+          onClick={() => navigateWeek('prev')}
+          className="w-7 h-7 flex items-center justify-center rounded-full"
+          style={{ background: '#F5F5F7' }}
+        >
+          <i className="ti ti-chevron-left" style={{ fontSize: 14, color: '#555566' }} />
+        </button>
+        <span className="text-[12px] font-medium" style={{ color: '#555566' }}>{weekLabel}</span>
+        <button
+          onClick={() => navigateWeek('next')}
+          className="w-7 h-7 flex items-center justify-center rounded-full"
+          style={{ background: '#F5F5F7' }}
+        >
+          <i className="ti ti-chevron-right" style={{ fontSize: 14, color: '#555566' }} />
+        </button>
+      </div>
 
-        <div className="flex gap-1">
-          {days.map(day => {
-            const isSelected  = isSameDay(day, selectedDay)
-            const today       = isToday(day)
-            const hasSess     = dayHasSessions(day)
-            const unconfirmed = dayUnconfirmedCount(day)
-
-            return (
-              <button
-                key={day.toISOString()}
-                onClick={() => setSelectedDay(day)}
-                className="flex-1 flex flex-col items-center py-1.5 rounded-[10px]"
-                style={{
-                  background: isSelected ? '#fff' : 'transparent',
-                  border: isSelected ? '1.5px solid #7C6EE6' : '1.5px solid transparent',
-                }}
-              >
-                <span className="text-[10px] font-medium" style={{ color: isSelected ? '#7C6EE6' : '#999AAA' }}>
-                  {format(day, 'EEE')[0]}
-                </span>
-                <span
-                  className="text-[13px] font-semibold mt-0.5"
-                  style={{ color: isSelected ? '#7C6EE6' : today ? '#1A1A2E' : '#555566' }}
-                >
-                  {format(day, 'd')}
-                </span>
-                <div className="h-2 mt-0.5 flex items-center justify-center">
-                  {hasSess && (
-                    <div
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{ background: unconfirmed > 0 ? '#7C6EE6' : '#26B99A' }}
-                    />
-                  )}
-                </div>
-              </button>
-            )
-          })}
+      {/* Week strip — 3-panel carousel */}
+      <div className="flex-shrink-0 overflow-hidden" style={{ borderBottom: '0.5px solid #E8E8EC' }}>
+        <div
+          ref={stripRef}
+          className="flex"
+          style={{ width: '300%', willChange: 'transform' }}
+          onTouchStart={onStripTouchStart}
+          onTouchMove={onStripTouchMove}
+          onTouchEnd={onStripTouchEnd}
+          onTouchCancel={onStripTouchCancel}
+        >
+          {([prevWeekDays, weekDays, nextWeekDays] as const).map((days, panelIdx) => (
+            <div key={panelIdx} className="flex px-4 pb-2 gap-1" style={{ width: '33.333%' }}>
+              {days.map(day => {
+                const isCurrentPanel = panelIdx === 1
+                const today          = isToday(day)
+                const hasSess        = isCurrentPanel && dayHasSessions(day)
+                const hasUnconf      = isCurrentPanel && dayHasUnconfirmed(day)
+                return (
+                  <div
+                    key={day.toISOString()}
+                    className="flex-1 flex flex-col items-center py-1.5 rounded-[10px]"
+                    style={{ border: (today && isCurrentPanel) ? '1.5px solid #7C6EE6' : '1.5px solid transparent' }}
+                  >
+                    <span className="text-[10px] font-medium" style={{ color: (today && isCurrentPanel) ? '#7C6EE6' : '#999AAA' }}>
+                      {format(day, 'EEE')[0]}
+                    </span>
+                    <span className="text-[13px] font-semibold mt-0.5" style={{ color: (today && isCurrentPanel) ? '#7C6EE6' : '#555566' }}>
+                      {format(day, 'd')}
+                    </span>
+                    <div className="h-2 mt-0.5 flex items-center justify-center">
+                      {hasSess && (
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: hasUnconf ? '#7C6EE6' : '#26B99A' }} />
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Day content */}
-      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
-        <div className="text-[11px] font-semibold uppercase tracking-wide mb-3" style={{ color: '#999AAA' }}>
-          {dayLabel}
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center pt-8">
+      {/* Feed */}
+      <div className="flex-1 overflow-y-auto pb-4">
+        {feedKey === 0 ? (
+          <div className="flex justify-center pt-10">
             <div className="w-7 h-7 border-2 rounded-full animate-spin" style={{ borderColor: '#EEEBfd', borderTopColor: '#7C6EE6' }} />
           </div>
-        ) : daySessions.length === 0 ? (
-          <div className="flex flex-col items-center pt-10 text-center px-6">
-            <i className="ti ti-calendar-off" style={{ fontSize: 32, color: '#D8D8DC' }} />
-            <p className="text-[13px] mt-3" style={{ color: '#999AAA' }}>
-              No sessions logged for this day.
-              <br />Your students' families report sessions as they happen.
-            </p>
-          </div>
         ) : (
-          daySessions.map(s => (
-            <SessionCard
-              key={s.id}
-              session={s}
-              onSelect={setSelected}
-              onConfirm={handleConfirm}
-              onUnconfirm={handleUnconfirm}
-            />
-          ))
+          <>
+            {/* Current week — directional slide */}
+            <div key={feedKey} style={{ animation: feedAnimStyle }}>
+              {dispWeekGroups.length === 0 ? (
+                <div className="flex flex-col items-center pt-12 text-center px-8">
+                  <i className="ti ti-calendar-off" style={{ fontSize: 32, color: '#D8D8DC' }} />
+                  <p className="text-[13px] mt-3" style={{ color: '#999AAA' }}>No sessions this week.</p>
+                </div>
+              ) : (
+                dispWeekGroups.map(({ day, sessions: daySessions }) => (
+                  <div key={day.toISOString()}>
+                    <div
+                      className="px-5 py-2 flex items-center gap-2"
+                      style={{
+                        position: 'sticky', top: 0, background: '#fff', zIndex: 1,
+                        borderBottom: '0.5px solid #E8E8EC',
+                        borderLeft:  isToday(day) ? '3px solid #7C6EE6' : '3px solid transparent',
+                      }}
+                    >
+                      <span className="text-[12px] font-semibold" style={{ color: '#1A1A2E' }}>
+                        {format(day, 'EEE, MMM d')}
+                      </span>
+                      {isToday(day) && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: '#EEEBfd', color: '#7C6EE6' }}>
+                          Today
+                        </span>
+                      )}
+                    </div>
+                    <div className="px-4 py-2">
+                      {daySessions.map(s => (
+                        <SessionCard
+                          key={s.id}
+                          session={s}
+                          hasConflict={conflictIds.has(s.id)}
+                          onSelect={setSelected}
+                          onConfirm={handleConfirm}
+                          onUnconfirm={handleUnconfirm}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Coming up — independently keyed, gentle fade */}
+            {dispNextWeekSessions.length > 0 && dispNextWeekStart && (() => {
+              const nwEnd = endOfWeek(dispNextWeekStart, { weekStartsOn: 0 })
+              const dayGroups = eachDayOfInterval({ start: dispNextWeekStart, end: nwEnd })
+                .map(day => ({
+                  day,
+                  sessions: dispNextWeekSessions
+                    .filter(s => isSameDay(parseISO(s.starts_at), day))
+                    .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
+                }))
+                .filter(g => g.sessions.length > 0)
+
+              return (
+                <div key={dispNextWeekStart.toISOString()} style={{ animation: 'comingUpFade 280ms ease-out' }}>
+                  <div className="flex items-center gap-3 px-5 mt-4 mb-1">
+                    <div className="flex-1 h-px" style={{ background: '#E8E8EC' }} />
+                    <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#C8C8D0' }}>
+                      Coming up · {format(dispNextWeekStart, 'MMM d')}–{format(nwEnd, 'd')}
+                    </span>
+                    <div className="flex-1 h-px" style={{ background: '#E8E8EC' }} />
+                  </div>
+                  {dayGroups.map(({ day, sessions: daySessions }) => (
+                    <div key={day.toISOString()}>
+                      <div
+                        className="px-5 py-2 flex items-center gap-2"
+                        style={{ borderBottom: '0.5px solid #E8E8EC', borderLeft: '3px solid transparent' }}
+                      >
+                        <span className="text-[12px] font-semibold" style={{ color: '#999AAA' }}>
+                          {format(day, 'EEE, MMM d')}
+                        </span>
+                      </div>
+                      <div className="px-4 py-2">
+                        {daySessions.map(s => (
+                          <SessionCard
+                            key={s.id}
+                            session={s}
+                            hasConflict={conflictIds.has(s.id)}
+                            onSelect={() => jumpToWeek(dispNextWeekStart!)}
+                            onConfirm={handleConfirm}
+                            onUnconfirm={handleUnconfirm}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+          </>
         )}
       </div>
 
       {selected && (
         <DetailSheet
           session={selected}
+          hasConflict={conflictIds.has(selected.id)}
           onClose={() => setSelected(null)}
           onConfirm={handleConfirm}
           onUnconfirm={handleUnconfirm}

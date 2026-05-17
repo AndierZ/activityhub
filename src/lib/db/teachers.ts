@@ -216,6 +216,22 @@ export interface TeacherSessionRow {
   child: { id: string; name: string }
 }
 
+export async function getTeacherNextSessions(
+  teacherId: string,
+  after: Date,
+  limit = 50
+): Promise<TeacherSessionRow[]> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('id, starts_at, ends_at, price, status, teacher_confirmed_at, notes, child:children(id, name)')
+    .eq('teacher_id', teacherId)
+    .gt('starts_at', after.toISOString())
+    .order('starts_at', { ascending: true })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as unknown as TeacherSessionRow[]
+}
+
 export async function getTeacherWeekSessions(
   teacherId: string,
   weekStart: Date,
@@ -248,6 +264,62 @@ export async function getTeacherPaymentHistory(teacherId: string): Promise<Teach
     .order('date', { ascending: false })
   if (error) throw error
   return (data ?? []) as unknown as TeacherPaymentRow[]
+}
+
+// ─── Teacher monthly session summary ─────────────────────────────────────────
+
+export interface TeacherMonthlySummary {
+  realizedThisMonth:  number
+  scheduledThisMonth: number
+  byStudent: Record<string, {  // key: `${user_id}:${child_id}`
+    user_id:         string
+    child_id:        string
+    child_name:      string
+    realizedAmount:  number
+    scheduledAmount: number
+  }>
+}
+
+export async function getTeacherMonthlySummary(
+  teacherId: string,
+  monthStart: Date,
+  monthEnd:   Date
+): Promise<TeacherMonthlySummary> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('user_id, child_id, status, price, child:children(id, name)')
+    .eq('teacher_id', teacherId)
+    .gte('starts_at', monthStart.toISOString())
+    .lt('starts_at', monthEnd.toISOString())
+
+  if (error) throw error
+
+  let realizedThisMonth  = 0
+  let scheduledThisMonth = 0
+  const byStudent: TeacherMonthlySummary['byStudent'] = {}
+
+  for (const s of data ?? []) {
+    const key   = `${s.user_id}:${s.child_id}`
+    const child = s.child as { id: string; name: string } | null
+    if (!byStudent[key]) {
+      byStudent[key] = {
+        user_id:         s.user_id,
+        child_id:        s.child_id,
+        child_name:      child?.name ?? 'Unknown',
+        realizedAmount:  0,
+        scheduledAmount: 0,
+      }
+    }
+    if (s.status === 'completed') {
+      realizedThisMonth             += Number(s.price)
+      byStudent[key].realizedAmount += Number(s.price)
+    } else if (s.status === 'scheduled') {
+      scheduledThisMonth              += Number(s.price)
+      byStudent[key].scheduledAmount  += Number(s.price)
+    }
+  }
+
+  return { realizedThisMonth, scheduledThisMonth, byStudent }
 }
 
 // ─── Crowdsourced schedule ────────────────────────────────────────────────────

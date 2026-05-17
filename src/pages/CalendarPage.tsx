@@ -766,24 +766,13 @@ export function CalendarPage() {
       `}</style>
 
       {/* Header */}
-      <div className="px-5 pt-3 pb-1 flex items-start gap-2.5">
-        <div className="flex-1">
-          <div className="font-serif text-[22px] leading-tight" style={{ color: '#1A1A2E' }}>
-            This week
-          </div>
-          <div className="flex items-center gap-1 mt-0.5">
-            <button onClick={prevWeek} className="p-0.5" style={{ color: '#999AAA' }}>
-              <i className="ti ti-chevron-left text-xs" />
-            </button>
-            <span className="text-[11px]" style={{ color: '#999AAA' }}>{weekLabel}</span>
-            <button onClick={nextWeek} className="p-0.5" style={{ color: '#999AAA' }}>
-              <i className="ti ti-chevron-right text-xs" />
-            </button>
-          </div>
+      <div className="px-5 pt-3 pb-2 flex items-center justify-between">
+        <div className="font-serif text-[22px] leading-tight" style={{ color: '#1A1A2E' }}>
+          This week
         </div>
         <button
           onClick={() => navigate('/profile')}
-          className="w-8 h-8 rounded-[10px] flex items-center justify-center mt-0.5"
+          className="w-8 h-8 rounded-[10px] flex items-center justify-center"
           style={{ border: '0.5px solid #E8E8EC' }}
         >
           <i className="ti ti-user text-[15px]" style={{ color: '#555566' }} />
@@ -823,6 +812,25 @@ export function CalendarPage() {
             </button>
           )
         })}
+      </div>
+
+      {/* Week nav — matches teacher schedule style */}
+      <div className="flex items-center justify-between px-4 pb-1">
+        <button
+          onClick={prevWeek}
+          className="w-7 h-7 flex items-center justify-center rounded-full"
+          style={{ background: '#F5F5F7' }}
+        >
+          <i className="ti ti-chevron-left" style={{ fontSize: 14, color: '#555566' }} />
+        </button>
+        <span className="text-[12px] font-medium" style={{ color: '#555566' }}>{weekLabel}</span>
+        <button
+          onClick={nextWeek}
+          className="w-7 h-7 flex items-center justify-center rounded-full"
+          style={{ background: '#F5F5F7' }}
+        >
+          <i className="ti ti-chevron-right" style={{ fontSize: 14, color: '#555566' }} />
+        </button>
       </div>
 
       {/* Week strip — 3-panel carousel (prev | current | next) */}

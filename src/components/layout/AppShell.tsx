@@ -59,7 +59,7 @@ const PARENT_NAV: NavItem[] = [
 ]
 
 const TEACHER_NAV: NavItem[] = [
-  { path: '/my-schedule', label: 'Schedule', icon: 'ti-calendar'    },
+  { path: '/my-schedule', label: 'Calendar', icon: 'ti-calendar'    },
   { path: '/payments',    label: 'Payments', icon: 'ti-credit-card' },
   { path: '/profile',     label: 'Profile',  icon: 'ti-user'        },
 ]
