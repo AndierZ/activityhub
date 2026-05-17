@@ -478,7 +478,7 @@ function SessionActionSheet({
 export function CalendarPage() {
   const { user, effectiveUserId } = useAuth()
   const uid = effectiveUserId ?? user?.id ?? ''
-  const navigate   = useNavigate()
+  const navigate = useNavigate()
 
   const [weekStart, setWeekStart]             = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
   const [selectedDate, setSelectedDate]       = useState(new Date())
@@ -488,47 +488,21 @@ export function CalendarPage() {
   const [conflictMap, setConflictMap]         = useState<Map<string, boolean>>(new Map())
   const [loading, setLoading]                 = useState(true)
   const [selectedSession, setSelectedSession] = useState<Session | null>(null)
-
-  // Feed display state — lags behind actual fetch state so the feed keeps showing
-  // old content while the new week loads, then slides in when data arrives.
-  const [dispWeekStart, setDispWeekStart]     = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
-  const [dispSessions, setDispSessions]       = useState<Session[]>([])
-  const [dispConflictMap, setDispConflictMap] = useState<Map<string, boolean>>(new Map())
-  const [feedKey, setFeedKey]                 = useState(0)
-  const [feedAnimStyle, setFeedAnimStyle]     = useState('none')
   const [nextWeekSessions, setNextWeekSessions] = useState<Session[]>([])
   const [nextWeekStart, setNextWeekStart]       = useState<Date | null>(null)
 
-  const scrollRef         = useRef<HTMLDivElement>(null)
-  const dayRefs           = useRef<Map<string, HTMLDivElement>>(new Map())
-  const stripRef          = useRef<HTMLDivElement>(null)
-  const touchStartX       = useRef<number | null>(null)
-  const didSwipe          = useRef(false)
-  const suppressScroll    = useRef(false)
-  const feedSlideDir               = useRef<'prev' | 'next' | null>(null)
-  const pendingNextWeekSessions    = useRef<Session[]>([])
-  const pendingNextWeekStart       = useRef<Date | null>(null)
-  const initialLoadDone            = useRef(false)
-  const isAnimating                = useRef(false)
-  // On first load scroll to today; on week nav scroll to the first day of new week
-  const pendingScrollKey  = useRef(format(new Date(), 'yyyy-MM-dd'))
+  const scrollRef   = useRef<HTMLDivElement>(null)
+  const dayRefs     = useRef<Map<string, HTMLDivElement>>(new Map())
+  const stripRef    = useRef<HTMLDivElement>(null)
+  const touchStartX = useRef<number | null>(null)
+  const didSwipe    = useRef(false)
+  const isAnimating = useRef(false)
 
-  const weekDays = eachDayOfInterval({
-    start: weekStart,
-    end:   endOfWeek(weekStart, { weekStartsOn: 0 }),
-  })
-  // Adjacent weeks — pre-rendered in the carousel panels
-  const prevWeekDays = eachDayOfInterval({
-    start: subWeeks(weekStart, 1),
-    end:   endOfWeek(subWeeks(weekStart, 1), { weekStartsOn: 0 }),
-  })
-  const nextWeekDays = eachDayOfInterval({
-    start: addWeeks(weekStart, 1),
-    end:   endOfWeek(addWeeks(weekStart, 1), { weekStartsOn: 0 }),
-  })
+  const weekEnd      = endOfWeek(weekStart, { weekStartsOn: 0 })
+  const prevWeekDays = eachDayOfInterval({ start: subWeeks(weekStart, 1), end: endOfWeek(subWeeks(weekStart, 1), { weekStartsOn: 0 }) })
+  const weekDays     = eachDayOfInterval({ start: weekStart, end: weekEnd })
+  const nextWeekDays = eachDayOfInterval({ start: addWeeks(weekStart, 1), end: endOfWeek(addWeeks(weekStart, 1), { weekStartsOn: 0 }) })
 
-  // "May 10-16 2026" or "May 30 – Jun 5 2026"
-  const weekEnd   = endOfWeek(weekStart, { weekStartsOn: 0 })
   const weekLabel = (() => {
     const sm = format(weekStart, 'MMM')
     const em = format(weekEnd,   'MMM')
@@ -538,19 +512,14 @@ export function CalendarPage() {
   })()
 
   // ── Load children once ────────────────────────────────────────────────────
-
   useEffect(() => {
     if (!user) return
     getChildren(uid).then(setChildren).catch(console.error)
   }, [user])
 
   // ── Load sessions when week or child filter changes ───────────────────────
-
   const loadSessions = useCallback(async () => {
-    if (!user) {
-      setLoading(false)
-      return
-    }
+    if (!user) { setLoading(false); return }
     const end = endOfWeek(weekStart, { weekStartsOn: 0 })
     setLoading(true)
     try {
@@ -560,31 +529,28 @@ export function CalendarPage() {
       ])
       setSessions(data)
 
-      // Parallel conflict checks
       const results = await Promise.all(
-        data.map(s => (
-          s.status === 'scheduled' && s.teacher_id
-            ? checkConflict(s.teacher_id, s.starts_at, s.ends_at, uid)
-            : Promise.resolve({ has_conflict: false, conflicting_sessions_count: 0 })
-        ))
+        data.map(s => s.status === 'scheduled' && s.teacher_id
+          ? checkConflict(s.teacher_id, s.starts_at, s.ends_at, uid)
+          : Promise.resolve({ has_conflict: false, conflicting_sessions_count: 0 })
+        )
       )
       const map = new Map<string, boolean>()
       data.forEach((s, i) => map.set(s.id, results[i].has_conflict))
       setConflictMap(map)
 
-      // Stash next-week data in refs — committed to display state atomically below
       if (upcoming.length > 0) {
         const firstDate = parseISO(upcoming[0].starts_at)
         const nwStart   = startOfWeek(firstDate, { weekStartsOn: 0 })
-        const nwEnd     = endOfWeek(firstDate,   { weekStartsOn: 0 })
-        pendingNextWeekStart.current    = nwStart
-        pendingNextWeekSessions.current = upcoming.filter(s => {
+        const nwEnd     = endOfWeek(firstDate, { weekStartsOn: 0 })
+        setNextWeekStart(nwStart)
+        setNextWeekSessions(upcoming.filter(s => {
           const d = parseISO(s.starts_at)
           return d >= nwStart && d <= nwEnd
-        })
+        }))
       } else {
-        pendingNextWeekStart.current    = null
-        pendingNextWeekSessions.current = []
+        setNextWeekStart(null)
+        setNextWeekSessions([])
       }
     } catch (err) {
       console.error(err)
@@ -595,52 +561,42 @@ export function CalendarPage() {
 
   useEffect(() => { loadSessions() }, [loadSessions])
 
-  // ── Carousel reset: snap strip back to center after week state updates ───────
-
+  // ── Strip snap + scroll reset on week change ──────────────────────────────
   useLayoutEffect(() => {
     const strip = stripRef.current
-    if (!strip) return
-    strip.style.transition = 'none'
-    strip.style.transform  = 'translateX(-33.333%)'
+    if (strip) {
+      strip.style.transition = 'none'
+      strip.style.transform  = 'translateX(-33.333%)'
+    }
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
   }, [weekStart])
 
   // ── Derived ───────────────────────────────────────────────────────────────
-
   function dotColorsForDay(day: Date): string[] {
     const daySessions = sessions.filter(s => isSameDay(parseISO(s.starts_at), day))
-    const uniqueChildIds = [...new Set(daySessions.map(s => s.child_id))]
-    return uniqueChildIds.map(id => {
+    return [...new Set(daySessions.map(s => s.child_id))].map(id => {
       const child = children.find(c => c.id === id)
       return child ? CHILD_COLOR_HEX[getChildColor(child.display_order)] : '#999AAA'
     })
   }
 
-  // Feed groups use display state so old content stays visible while new week loads
-  const dispWeekDays = eachDayOfInterval({
-    start: dispWeekStart,
-    end:   endOfWeek(dispWeekStart, { weekStartsOn: 0 }),
-  })
-  const dispWeekGroups = dispWeekDays.map(day => {
+  const weekGroups = weekDays.map(day => {
     const key = format(day, 'yyyy-MM-dd')
-    const daySessions = dispSessions
+    const daySessions = sessions
       .filter(s => isSameDay(parseISO(s.starts_at), day))
       .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
     return { day, key, sessions: daySessions }
   })
 
   // ── Scroll: feed → strip sync ─────────────────────────────────────────────
-
   useEffect(() => {
     const container = scrollRef.current
     if (!container) return
-
     function onScroll() {
-      if (suppressScroll.current) return
       const containerTop = container!.getBoundingClientRect().top
       const entries = Array.from(dayRefs.current.entries())
         .map(([key, el]) => ({ key, top: el.getBoundingClientRect().top }))
         .sort((a, b) => a.top - b.top)
-
       let activeKey: string | null = null
       for (const { key, top } of entries) {
         if (top <= containerTop + 10) activeKey = key
@@ -648,72 +604,26 @@ export function CalendarPage() {
       if (!activeKey && entries.length > 0) activeKey = entries[0].key
       if (activeKey) setSelectedDate(parseISO(activeKey))
     }
-
     container.addEventListener('scroll', onScroll, { passive: true })
     return () => container.removeEventListener('scroll', onScroll)
-  }, [dispWeekStart])
+  }, [weekStart])
 
-  // ── Commit display state when new data arrives ────────────────────────────
-
-  useEffect(() => {
-    if (loading) return
-    const isFirst = !initialLoadDone.current
-    initialLoadDone.current = true
-    const dir = feedSlideDir.current
-    feedSlideDir.current = null
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    setDispWeekStart(weekStart)
-    setDispSessions(sessions)
-    setDispConflictMap(conflictMap)
-    setNextWeekStart(pendingNextWeekStart.current)
-    setNextWeekSessions(pendingNextWeekSessions.current)
-    setFeedAnimStyle(
-      isFirst        ? 'feedFadeIn 220ms ease-out' :
-      dir === 'next' ? 'feedSlideNext 320ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' :
-      dir === 'prev' ? 'feedSlidePrev 320ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' :
-                       'feedFadeIn 220ms ease-out'
-    )
-    setFeedKey(k => k + 1)
-  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Scroll to pending date after display state updates ────────────────────
-
-  useEffect(() => {
-    const key = pendingScrollKey.current
-    const el  = dayRefs.current.get(key)
-    if (el) {
-      el.scrollIntoView({ block: 'start' })
-      setTimeout(() => { suppressScroll.current = false }, 200)
-    } else {
-      suppressScroll.current = false
-    }
-  }, [dispWeekStart])
-
-  // ── Week navigation ───────────────────────────────────────────────────────
-
+  // ── Navigation ────────────────────────────────────────────────────────────
   function jumpToWeek(target: Date) {
     if (isAnimating.current) return
-    suppressScroll.current   = true
-    feedSlideDir.current     = 'next'
-    pendingScrollKey.current = format(target, 'yyyy-MM-dd')
     setWeekStart(target)
     setSelectedDate(target)
   }
 
   function navigateWeek(dir: 'prev' | 'next') {
     if (isAnimating.current) return
-    isAnimating.current    = true
-    suppressScroll.current = true
-    feedSlideDir.current   = dir
+    isAnimating.current = true
     const newStart = dir === 'prev' ? subWeeks(weekStart, 1) : addWeeks(weekStart, 1)
-    pendingScrollKey.current = format(newStart, 'yyyy-MM-dd')
-    // Slide the carousel: prev → reveal left panel (0%), next → reveal right panel (-66.666%)
     const strip = stripRef.current
     if (strip) {
       strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
       strip.style.transform  = dir === 'prev' ? 'translateX(0%)' : 'translateX(-66.666%)'
     }
-    // Wait for carousel to settle, then update state — useLayoutEffect snaps strip back to center
     setTimeout(() => {
       isAnimating.current = false
       setWeekStart(newStart)
@@ -724,21 +634,15 @@ export function CalendarPage() {
   const nextWeek = () => navigateWeek('next')
 
   // ── Date tap ──────────────────────────────────────────────────────────────
-
   function handleDateTap(day: Date) {
     if (didSwipe.current) { didSwipe.current = false; return }
     setSelectedDate(day)
     const key = format(day, 'yyyy-MM-dd')
     const el  = dayRefs.current.get(key)
-    if (el) {
-      suppressScroll.current = true
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      setTimeout(() => { suppressScroll.current = false }, 600)
-    }
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   // ── Swipe on week strip ───────────────────────────────────────────────────
-
   function onStripTouchStart(e: React.TouchEvent) {
     touchStartX.current = e.touches[0].clientX
     didSwipe.current    = false
@@ -749,14 +653,12 @@ export function CalendarPage() {
     const strip = stripRef.current
     if (!strip) return
     strip.style.transition = 'none'
-    // Carousel base offset (-33.333%) plus live finger delta
     strip.style.transform  = `translateX(calc(-33.333% + ${delta}px))`
   }
   function onStripTouchEnd(e: React.TouchEvent) {
     if (touchStartX.current === null) return
     const delta = e.changedTouches[0].clientX - touchStartX.current
     touchStartX.current = null
-
     if (Math.abs(delta) > 50) {
       didSwipe.current = true
       navigateWeek(delta > 0 ? 'prev' : 'next')
@@ -778,15 +680,8 @@ export function CalendarPage() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <style>{`
-        @keyframes feedFadeIn    { from { opacity: 0 }                              to { opacity: 1 } }
-        @keyframes feedSlideNext { from { opacity: 0.7; transform: translateY(28px) } to { opacity: 1; transform: none } }
-        @keyframes feedSlidePrev { from { opacity: 0.7; transform: translateY(-28px) } to { opacity: 1; transform: none } }
-        @keyframes comingUpFade  { from { opacity: 0 }                              to { opacity: 1 } }
-      `}</style>
 
       {/* Header */}
       <div className="px-5 pt-3 pb-2 flex items-center justify-between">
@@ -808,9 +703,9 @@ export function CalendarPage() {
           onClick={() => setSelectedChildId(null)}
           className="px-3 py-1 rounded-2xl text-xs font-medium transition-colors"
           style={{
-            border:      selectedChildId === null ? '0.5px solid #D8D8DC' : '0.5px solid #E8E8EC',
-            background:  selectedChildId === null ? '#F5F5F7' : 'transparent',
-            color:       selectedChildId === null ? '#1A1A2E' : '#555566',
+            border:     selectedChildId === null ? '0.5px solid #D8D8DC' : '0.5px solid #E8E8EC',
+            background: selectedChildId === null ? '#F5F5F7' : 'transparent',
+            color:      selectedChildId === null ? '#1A1A2E' : '#555566',
           }}
         >
           Everyone
@@ -837,26 +732,18 @@ export function CalendarPage() {
         })}
       </div>
 
-      {/* Week nav — matches teacher schedule style */}
+      {/* Week nav */}
       <div className="flex items-center justify-between px-4 pb-1">
-        <button
-          onClick={prevWeek}
-          className="w-7 h-7 flex items-center justify-center rounded-full"
-          style={{ background: '#F5F5F7' }}
-        >
+        <button onClick={prevWeek} className="w-7 h-7 flex items-center justify-center rounded-full" style={{ background: '#F5F5F7' }}>
           <i className="ti ti-chevron-left" style={{ fontSize: 14, color: '#555566' }} />
         </button>
         <span className="text-[12px] font-medium" style={{ color: '#555566' }}>{weekLabel}</span>
-        <button
-          onClick={nextWeek}
-          className="w-7 h-7 flex items-center justify-center rounded-full"
-          style={{ background: '#F5F5F7' }}
-        >
+        <button onClick={nextWeek} className="w-7 h-7 flex items-center justify-center rounded-full" style={{ background: '#F5F5F7' }}>
           <i className="ti ti-chevron-right" style={{ fontSize: 14, color: '#555566' }} />
         </button>
       </div>
 
-      {/* Week strip — 3-panel carousel (prev | current | next) */}
+      {/* Week strip — 3-panel carousel */}
       <div className="overflow-hidden">
         <div
           ref={stripRef}
@@ -867,7 +754,6 @@ export function CalendarPage() {
           onTouchEnd={onStripTouchEnd}
           onTouchCancel={onStripTouchCancel}
         >
-          {/* Prev week panel — visual only, no interaction */}
           <div className="flex px-3.5 pb-2 gap-0.5" style={{ width: '33.333%' }}>
             {prevWeekDays.map(day => (
               <div key={day.toISOString()} className="flex-1 flex flex-col items-center py-1.5 rounded-xl" style={{ border: '0.5px solid transparent' }}>
@@ -877,7 +763,6 @@ export function CalendarPage() {
               </div>
             ))}
           </div>
-          {/* Current week panel — interactive */}
           <div className="flex px-3.5 pb-2 gap-0.5" style={{ width: '33.333%' }}>
             {weekDays.map(day => {
               const selected  = isSameDay(day, selectedDate)
@@ -906,7 +791,6 @@ export function CalendarPage() {
               )
             })}
           </div>
-          {/* Next week panel — visual only, no interaction */}
           <div className="flex px-3.5 pb-2 gap-0.5" style={{ width: '33.333%' }}>
             {nextWeekDays.map(day => (
               <div key={day.toISOString()} className="flex-1 flex flex-col items-center py-1.5 rounded-xl" style={{ border: '0.5px solid transparent' }}>
@@ -919,66 +803,63 @@ export function CalendarPage() {
         </div>
       </div>
 
-      {/* Full-week feed — uses display state so old content stays visible while new week loads */}
+      {/* Session feed */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
-        {feedKey === 0 ? (
+        {loading ? (
           <div className="flex items-center justify-center pt-10">
             <span className="text-[13px]" style={{ color: '#999AAA' }}>Loading…</span>
           </div>
         ) : (
           <>
-            {/* Current week — directional slide animation */}
-            <div key={feedKey} style={{ animation: feedAnimStyle }}>
-              {dispSessions.length === 0 ? (
-                <div className="flex flex-col items-center pt-12 text-center px-8">
-                  <i className="ti ti-calendar-off" style={{ fontSize: 32, color: '#D8D8DC' }} />
-                  <p className="text-[13px] mt-3" style={{ color: '#999AAA' }}>No sessions this week.</p>
-                </div>
-              ) : (
-                dispWeekGroups
-                  .filter(g => g.sessions.length > 0)
-                  .map(({ day, key, sessions: daySessions }) => (
+            {sessions.length === 0 ? (
+              <div className="flex flex-col items-center pt-12 text-center px-8">
+                <i className="ti ti-calendar-off" style={{ fontSize: 32, color: '#D8D8DC' }} />
+                <p className="text-[13px] mt-3" style={{ color: '#999AAA' }}>No sessions this week.</p>
+              </div>
+            ) : (
+              weekGroups
+                .filter(g => g.sessions.length > 0)
+                .map(({ day, key, sessions: daySessions }) => (
+                  <div
+                    key={key}
+                    ref={el => { if (el) dayRefs.current.set(key, el); else dayRefs.current.delete(key) }}
+                  >
                     <div
-                      key={key}
-                      ref={el => { if (el) dayRefs.current.set(key, el); else dayRefs.current.delete(key) }}
+                      className="px-5 py-2 flex items-center gap-2"
+                      style={{
+                        position:     'sticky',
+                        top:          0,
+                        background:   '#fff',
+                        zIndex:       1,
+                        borderBottom: '0.5px solid #E8E8EC',
+                        borderLeft:   isSameDay(day, selectedDate) ? '3px solid #7C6EE6' : '3px solid transparent',
+                      }}
                     >
-                      <div
-                        className="px-5 py-2 flex items-center gap-2"
-                        style={{
-                          position:    'sticky',
-                          top:         0,
-                          background:  '#fff',
-                          zIndex:      1,
-                          borderBottom: '0.5px solid #E8E8EC',
-                          borderLeft:  isSameDay(day, selectedDate) ? '3px solid #7C6EE6' : '3px solid transparent',
-                        }}
-                      >
-                        <span className="text-[12px] font-semibold" style={{ color: isSameDay(day, selectedDate) ? '#7C6EE6' : '#1A1A2E' }}>
-                          {format(day, 'EEE, MMM d')}
+                      <span className="text-[12px] font-semibold" style={{ color: isSameDay(day, selectedDate) ? '#7C6EE6' : '#1A1A2E' }}>
+                        {format(day, 'EEE, MMM d')}
+                      </span>
+                      {isToday(day) && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: '#EEEBfd', color: '#7C6EE6' }}>
+                          Today
                         </span>
-                        {isToday(day) && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: '#EEEBfd', color: '#7C6EE6' }}>
-                            Today
-                          </span>
-                        )}
-                      </div>
-                      <div className="px-5 py-2">
-                        {daySessions.map(s => (
-                          <SessionBlock
-                            key={s.id}
-                            session={s}
-                            allChildren={children}
-                            hasConflict={dispConflictMap.get(s.id) ?? false}
-                            onSelect={setSelectedSession}
-                          />
-                        ))}
-                      </div>
+                      )}
                     </div>
-                  ))
-              )}
-            </div>
+                    <div className="px-5 py-2">
+                      {daySessions.map(s => (
+                        <SessionBlock
+                          key={s.id}
+                          session={s}
+                          allChildren={children}
+                          hasConflict={conflictMap.get(s.id) ?? false}
+                          onSelect={setSelectedSession}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
+            )}
 
-            {/* Coming up — independently keyed so it animates separately from current week */}
+            {/* Coming up */}
             {nextWeekSessions.length > 0 && nextWeekStart && (() => {
               const nwEnd = endOfWeek(nextWeekStart, { weekStartsOn: 0 })
               const dayGroups = eachDayOfInterval({ start: nextWeekStart, end: nwEnd })
@@ -991,7 +872,7 @@ export function CalendarPage() {
                 .filter(g => g.sessions.length > 0)
 
               return (
-                <div key={nextWeekStart.toISOString()} style={{ animation: 'comingUpFade 280ms ease-out' }}>
+                <>
                   <div className="flex items-center gap-3 px-5 mt-4 mb-1">
                     <div className="flex-1 h-px" style={{ background: '#E8E8EC' }} />
                     <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#C8C8D0' }}>
@@ -1022,11 +903,11 @@ export function CalendarPage() {
                       </div>
                     </div>
                   ))}
-                </div>
+                </>
               )
             })()}
 
-            {/* Log prompt — outside both keyed blocks so it stays stable */}
+            {/* Log prompt */}
             <div className="px-5 pt-2 pb-2">
               <button
                 onClick={() => navigate('/log')}
@@ -1052,7 +933,6 @@ export function CalendarPage() {
           }}
         />
       )}
-
     </div>
   )
 }
