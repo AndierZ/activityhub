@@ -561,7 +561,7 @@ export function CalendarPage() {
 
     function onScroll() {
       if (suppressScroll.current) return
-      const containerTop = container.getBoundingClientRect().top
+      const containerTop = container!.getBoundingClientRect().top
       const entries = Array.from(dayRefs.current.entries())
         .map(([key, el]) => ({ key, top: el.getBoundingClientRect().top }))
         .sort((a, b) => a.top - b.top)

@@ -26,13 +26,15 @@ function IOSInstallBanner() {
       className="flex-shrink-0 flex items-start gap-3 px-4 py-3 mx-3 mb-2 rounded-[14px]"
       style={{ background: '#EEEBfd', border: '0.5px solid #C8C2F5' }}
     >
-      <i className="ti ti-dots flex-shrink-0 mt-0.5" style={{ fontSize: 18, color: '#7C6EE6' }} />
+      <i className="ti ti-device-mobile-plus flex-shrink-0 mt-0.5" style={{ fontSize: 18, color: '#7C6EE6' }} />
       <div className="flex-1 min-w-0">
         <div className="text-[13px] font-semibold" style={{ color: '#1A1A2E' }}>
           Add to Home Screen
         </div>
         <div className="text-[12px] mt-0.5 leading-snug" style={{ color: '#555566' }}>
-          Tap <i className="ti ti-dots" style={{ fontSize: 11 }} /> Share, then <strong>Add to Home Screen</strong> for the full app experience.
+          Tap <i className="ti ti-dots" style={{ fontSize: 11 }} /> in the bottom-right of Safari,
+          then <i className="ti ti-square-arrow-up" style={{ fontSize: 11 }} /> <strong>Share</strong>,
+          then scroll down to <strong>Add to Home Screen</strong>.
         </div>
       </div>
       <button onClick={dismiss} className="flex-shrink-0 p-0.5" aria-label="Dismiss">

@@ -363,7 +363,6 @@ export function PaymentsPage() {
                     const amtColor  = settled ? '#999AAA' : owed ? '#E8A838' : '#26B99A'
                     const statusLbl = settled ? 'Settled' : owed ? 'You owe' : 'In credit'
                     const statusClr = settled ? '#999AAA' : owed ? '#C0830A' : '#26B99A'
-                    const dotColor  = settled ? '#26B99A' : owed ? '#E8A838' : '#26B99A'
 
                     const pairKey  = `${b.child.id}:${b.teacher.id}`
                     const pairData = monthByPair[pairKey]

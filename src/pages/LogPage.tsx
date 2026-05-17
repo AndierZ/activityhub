@@ -322,10 +322,10 @@ export function LogPage() {
       if (recurring) {
         const computedEndDate = format(addDays(selectedDate, recurringWeeks * 7), 'yyyy-MM-dd')
         await createRecurringSessions(uid, {
-          child_id:         selectedChildId,
+          child_id:         selectedChildId!,
           teacher_id:       teacherId,
           title,
-          day_of_week:      sessionStart.getDay(),
+          day_of_week:      sessionStart!.getDay(),
           time_of_day:      `${startTime}:00`,
           duration_minutes: durationMinutes,
           price:            parsedPrice,
@@ -335,11 +335,11 @@ export function LogPage() {
         })
       } else {
         await createOneOffSession(uid, {
-          child_id:   selectedChildId,
+          child_id:   selectedChildId!,
           teacher_id: teacherId,
           title,
-          starts_at:  sessionStart.toISOString(),
-          ends_at:    sessionEnd.toISOString(),
+          starts_at:  sessionStart!.toISOString(),
+          ends_at:    sessionEnd!.toISOString(),
           price:      parsedPrice,
         })
       }
