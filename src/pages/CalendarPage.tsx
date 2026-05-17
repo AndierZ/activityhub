@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   startOfWeek, endOfWeek, eachDayOfInterval,
@@ -467,9 +467,11 @@ export function CalendarPage() {
 
   const scrollRef         = useRef<HTMLDivElement>(null)
   const dayRefs           = useRef<Map<string, HTMLDivElement>>(new Map())
+  const stripRef          = useRef<HTMLDivElement>(null)
   const touchStartX       = useRef<number | null>(null)
   const didSwipe          = useRef(false)
   const suppressScroll    = useRef(false)
+  const pendingSlideDir   = useRef<'prev' | 'next' | null>(null)
   // On first load scroll to today; on week nav scroll to the carried-over day
   const pendingScrollKey  = useRef(format(new Date(), 'yyyy-MM-dd'))
 
@@ -533,6 +535,26 @@ export function CalendarPage() {
 
   useEffect(() => { loadSessions() }, [loadSessions])
 
+  // ── Strip slide-in animation after week change ────────────────────────────
+
+  useLayoutEffect(() => {
+    const strip = stripRef.current
+    const dir   = pendingSlideDir.current
+    if (!strip || !dir) return
+    pendingSlideDir.current = null
+
+    const startX = dir === 'prev' ? '-100%' : '100%'
+    strip.style.transition = 'none'
+    strip.style.transform  = `translateX(${startX})`
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        strip.style.transition = 'transform 260ms ease-out'
+        strip.style.transform  = 'translateX(0)'
+      })
+    })
+  }, [weekStart])
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
   function dotColorsForDay(day: Date): string[] {
@@ -594,12 +616,14 @@ export function CalendarPage() {
   // ── Week navigation ───────────────────────────────────────────────────────
 
   function prevWeek() {
+    pendingSlideDir.current = 'prev'
     const next = subWeeks(selectedDate, 1)
     pendingScrollKey.current = format(next, 'yyyy-MM-dd')
     setWeekStart(w => subWeeks(w, 1))
     setSelectedDate(next)
   }
   function nextWeek() {
+    pendingSlideDir.current = 'next'
     const next = addWeeks(selectedDate, 1)
     pendingScrollKey.current = format(next, 'yyyy-MM-dd')
     setWeekStart(w => addWeeks(w, 1))
@@ -626,20 +650,52 @@ export function CalendarPage() {
     touchStartX.current = e.touches[0].clientX
     didSwipe.current    = false
   }
+  function onStripTouchMove(e: React.TouchEvent) {
+    if (touchStartX.current === null) return
+    const delta = e.touches[0].clientX - touchStartX.current
+    const strip = stripRef.current
+    if (!strip) return
+    strip.style.transition = 'none'
+    strip.style.transform  = `translateX(${delta}px)`
+  }
   function onStripTouchEnd(e: React.TouchEvent) {
     if (touchStartX.current === null) return
     const delta = e.changedTouches[0].clientX - touchStartX.current
     touchStartX.current = null
+    const strip = stripRef.current
+
     if (Math.abs(delta) > 50) {
       didSwipe.current = true
-      if (delta > 0) prevWeek(); else nextWeek()
+      if (strip) {
+        const exitX = delta > 0 ? '100%' : '-100%'
+        strip.style.transition = 'transform 200ms ease-in'
+        strip.style.transform  = `translateX(${exitX})`
+      }
+      // Wait for exit animation, then switch week (useLayoutEffect handles entry)
+      setTimeout(() => {
+        if (delta > 0) prevWeek(); else nextWeek()
+      }, 200)
+    } else {
+      // Snap back if not a committed swipe
+      if (strip) {
+        strip.style.transition = 'transform 180ms ease-out'
+        strip.style.transform  = 'translateX(0)'
+      }
     }
+  }
+  function onStripTouchCancel() {
+    touchStartX.current = null
+    const strip = stripRef.current
+    if (!strip) return
+    strip.style.transition = 'transform 180ms ease-out'
+    strip.style.transform  = 'translateX(0)'
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      <style>{`@keyframes feedFadeIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
 
       {/* Header */}
       <div className="px-5 pt-3 pb-1 flex items-start gap-2.5">
@@ -702,10 +758,14 @@ export function CalendarPage() {
       </div>
 
       {/* Week strip — swipeable */}
+      <div className="overflow-hidden">
       <div
+        ref={stripRef}
         className="flex px-3.5 pb-2 gap-0.5"
         onTouchStart={onStripTouchStart}
+        onTouchMove={onStripTouchMove}
         onTouchEnd={onStripTouchEnd}
+        onTouchCancel={onStripTouchCancel}
       >
         {weekDays.map(day => {
           const selected  = isSameDay(day, selectedDate)
@@ -734,6 +794,7 @@ export function CalendarPage() {
           )
         })}
       </div>
+      </div>
 
       {/* Full-week feed */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
@@ -742,7 +803,7 @@ export function CalendarPage() {
             <span className="text-[13px]" style={{ color: '#999AAA' }}>Loading…</span>
           </div>
         ) : (
-          <>
+          <div key={format(weekStart, 'yyyy-MM-dd')} style={{ animation: 'feedFadeIn 220ms ease-out' }}>
             {weekGroups.map(({ day, key, sessions: daySessions }) => (
               <div
                 key={key}
@@ -802,7 +863,7 @@ export function CalendarPage() {
                 Log an activity
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
 
