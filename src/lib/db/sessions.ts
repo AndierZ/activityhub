@@ -155,6 +155,22 @@ export async function unconfirmSession(sessionId: string): Promise<void> {
   if (error) throw error
 }
 
+export async function getNextSessions(
+  userId: string,
+  after: Date,
+  limit = 50
+): Promise<Session[]> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select(`*, child:children(*), teacher:teachers(*)`)
+    .eq('user_id', userId)
+    .gt('starts_at', after.toISOString())
+    .order('starts_at', { ascending: true })
+    .limit(limit)
+  if (error) throw error
+  return data ?? []
+}
+
 // ─── Conflict detection ───────────────────────────────────────────────────────
 
 export async function checkConflict(

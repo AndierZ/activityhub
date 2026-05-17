@@ -246,20 +246,19 @@ export function PaymentsPage() {
 
   // ── Derived ──────────────────────────────────────────────────────────────────
 
-  const overallBalance  = balances.reduce((s, b) => s + b.balance, 0)
-  const teachersOwed    = balances.filter(b => b.balance > 0).length
-  const monthTotal      = realizedThisMonth + scheduledThisMonth
-  const monthPct        = monthTotal > 0 ? (realizedThisMonth / monthTotal) * 100 : 0
+  const monthTotal = realizedThisMonth + scheduledThisMonth
+  const monthPct   = monthTotal > 0 ? (realizedThisMonth / monthTotal) * 100 : 0
 
-  const balanceColor =
-    overallBalance > 0  ? '#E8A838' :
-    overallBalance < 0  ? '#26B99A' :
-    '#999AAA'
-
-  const balanceLabel =
-    overallBalance > 0  ? `you owe · ${teachersOwed} teacher${teachersOwed !== 1 ? 's' : ''}` :
-    overallBalance < 0  ? 'in credit' :
-    'all settled'
+  const balancePairKeys = new Set(balances.map(b => `${b.child.id}:${b.teacher.id}`))
+  const upcomingOnlyRows = Object.entries(monthByPair)
+    .filter(([key, data]) => !balancePairKeys.has(key) && data.scheduledAmount > 0)
+    .flatMap(([key, data]) => {
+      const [childId, teacherId] = key.split(':')
+      const child = children.find(c => c.id === childId)
+      const ut    = savedTeachers.find(ut => ut.teacher_id === teacherId)
+      if (!child || !ut?.teacher) return []
+      return [{ child, teacher: ut.teacher, scheduledAmount: data.scheduledAmount }]
+    })
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -276,47 +275,41 @@ export function PaymentsPage() {
       <div className="flex-1 overflow-y-auto">
 
         <>
-          {/* Balance hero */}
+          {/* Monthly summary */}
           <div className="mx-5 mt-4 p-4 rounded-[14px]" style={{ border: '0.5px solid #E8E8EC' }}>
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: '#999AAA' }}>
-                  Balance
-                </div>
-                {loading ? (
-                  <div className="h-8 w-20 rounded-lg mt-0.5" style={{ background: '#F5F5F7' }} />
-                ) : (
-                  <div className="text-[28px] font-bold leading-none" style={{ color: balanceColor, fontVariantNumeric: 'tabular-nums' }}>
-                    {fmtAmt(overallBalance)}
-                  </div>
-                )}
-                <div className="text-[11px] mt-1" style={{ color: '#999AAA' }}>
-                  {loading ? '—' : balanceLabel}
-                </div>
-              </div>
-              <div className="text-[11px]" style={{ color: '#999AAA' }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#999AAA' }}>
                 {format(new Date(), 'MMM yyyy')}
               </div>
             </div>
 
-            {/* Session progress bar */}
-            {!loading && monthTotal > 0 && (
+            {loading ? (
+              <div className="h-8 w-32 rounded-lg" style={{ background: '#F5F5F7' }} />
+            ) : monthTotal > 0 ? (
               <>
+                <div className="flex justify-between mb-2">
+                  <div>
+                    <div className="text-[22px] font-bold leading-none" style={{ color: '#26B99A', fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtAmt(realizedThisMonth)}
+                    </div>
+                    <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>done</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[22px] font-bold leading-none" style={{ color: '#999AAA', fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtAmt(scheduledThisMonth)}
+                    </div>
+                    <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>upcoming</div>
+                  </div>
+                </div>
                 <div className="h-[5px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{ width: `${monthPct}%`, background: '#26B99A' }}
                   />
                 </div>
-                <div className="flex justify-between mt-1.5">
-                  <span className="text-[11px]" style={{ color: '#26B99A' }}>
-                    {fmtAmt(realizedThisMonth)} done
-                  </span>
-                  <span className="text-[11px]" style={{ color: '#999AAA' }}>
-                    {fmtAmt(scheduledThisMonth)} upcoming
-                  </span>
-                </div>
               </>
+            ) : (
+              <div className="text-[13px]" style={{ color: '#999AAA' }}>No sessions logged this month.</div>
             )}
           </div>
 
@@ -428,7 +421,56 @@ export function PaymentsPage() {
               </div>
             )}
 
-          {!loading && balances.length === 0 && (
+          {/* Upcoming-only rows — teachers with only scheduled sessions this month */}
+          {!loading && upcomingOnlyRows.length > 0 && (
+            <div className="px-5 mt-4 pb-2">
+              {!balances.length && (
+                <div
+                  className="text-[11px] font-semibold uppercase tracking-wide mb-2"
+                  style={{ color: '#999AAA' }}
+                >
+                  {format(new Date(), 'MMM yyyy')}
+                </div>
+              )}
+              <div className="rounded-[14px] overflow-hidden" style={{ border: '0.5px solid #E8E8EC' }}>
+                {upcomingOnlyRows.map((row, i) => {
+                  const color = getChildColor(row.child.display_order)
+                  const hex   = CHILD_COLOR_HEX[color]
+                  const bg    = CHILD_COLOR_BG[color]
+                  return (
+                    <button
+                      key={`${row.child.id}:${row.teacher.id}`}
+                      onClick={() => navigate(`/payments/${row.child.id}/${row.teacher.id}`)}
+                      className="w-full flex items-center gap-3 px-3.5 py-3"
+                      style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none', background: '#fff' }}
+                    >
+                      <div
+                        className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0"
+                        style={{ background: bg }}
+                      >
+                        <i className={`ti ${subjectIcon(row.teacher.subject)}`} style={{ fontSize: 16, color: hex }} />
+                      </div>
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
+                          {row.teacher.subject} · {row.teacher.name}
+                        </div>
+                        <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>{row.child.name}</div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-[13px] font-semibold" style={{ color: '#1A1A2E', fontVariantNumeric: 'tabular-nums' }}>
+                          {fmtAmt(row.scheduledAmount)}
+                        </div>
+                        <div className="text-[10px] mt-0.5" style={{ color: '#999AAA' }}>upcoming</div>
+                      </div>
+                      <i className="ti ti-chevron-right flex-shrink-0" style={{ fontSize: 14, color: '#999AAA' }} />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {!loading && balances.length === 0 && upcomingOnlyRows.length === 0 && (
             <div className="flex flex-col items-center justify-center pt-12 text-center px-8">
               <i className="ti ti-credit-card" style={{ fontSize: 36, color: '#D8D8DC' }} />
               <p className="text-sm mt-3" style={{ color: '#999AAA' }}>
