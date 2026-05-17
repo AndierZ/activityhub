@@ -300,7 +300,7 @@ export async function getTeacherMonthlySummary(
 
   for (const s of data ?? []) {
     const key   = `${s.user_id}:${s.child_id}`
-    const child = s.child as { id: string; name: string } | null
+    const child = s.child as unknown as { id: string; name: string } | null
     if (!byStudent[key]) {
       byStudent[key] = {
         user_id:         s.user_id,
