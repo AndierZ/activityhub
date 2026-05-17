@@ -295,6 +295,18 @@ export async function completeSession(sessionId: string): Promise<Session> {
   return data
 }
 
+export async function uncompleteSession(sessionId: string): Promise<Session> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .update({ status: 'scheduled', updated_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .select(`*, child:children(*), teacher:teachers(*)`)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
 export async function updateSessionPrice(
   sessionId: string,
   price: number

@@ -12,6 +12,7 @@ import {
   getNextSessions,
   checkConflict,
   completeSession,
+  uncompleteSession,
   deleteSession,
   deleteSessionsInSeriesFrom,
   updateSession,
@@ -220,6 +221,19 @@ function SessionActionSheet({
     }
   }
 
+  async function handleUncomplete() {
+    if (saving || session.status !== 'completed') return
+    setSaving(true)
+    try {
+      await uncompleteSession(session.id)
+      onSaved()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleDeleteOne() {
     if (deleting) return
     setDeleting(true)
@@ -330,7 +344,7 @@ function SessionActionSheet({
               )}
             </div>
 
-            {session.status !== 'completed' && (
+            {session.status !== 'completed' ? (
               <button
                 onClick={handleComplete}
                 disabled={saving}
@@ -338,6 +352,15 @@ function SessionActionSheet({
                 style={{ background: '#26B99A', color: '#fff' }}
               >
                 {saving ? 'Saving...' : 'Mark session complete'}
+              </button>
+            ) : (
+              <button
+                onClick={handleUncomplete}
+                disabled={saving}
+                className="w-full py-3 rounded-[12px] text-[13px] font-semibold mb-2"
+                style={{ border: '0.5px solid #26B99A', color: '#26B99A' }}
+              >
+                {saving ? 'Saving...' : 'Undo completion'}
               </button>
             )}
 

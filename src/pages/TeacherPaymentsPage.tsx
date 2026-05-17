@@ -77,7 +77,7 @@ export function TeacherPaymentsPage() {
                   <div className="text-[22px] font-bold leading-none" style={{ color: '#26B99A', fontVariantNumeric: 'tabular-nums' }}>
                     {fmtAmt(realized)}
                   </div>
-                  <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>done</div>
+                  <div className="text-[11px] mt-0.5" style={{ color: '#26B99A' }}>completed</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[22px] font-bold leading-none" style={{ color: '#999AAA', fontVariantNumeric: 'tabular-nums' }}>
@@ -120,11 +120,12 @@ export function TeacherPaymentsPage() {
 
               {/* Balance rows */}
               {rows.map((row, i) => {
-                const settled  = Math.abs(row.balance) < 0.01
-                const owed     = row.balance > 0
-                const amtLabel = settled ? 'Settled' : owed ? fmtAmt(row.balance) : `${fmtAmt(row.balance)} credit`
-                const amtColor = settled ? '#999AAA' : owed ? '#E8A838' : '#26B99A'
-                const dotColor = settled ? '#26B99A' : owed ? '#E8A838' : '#26B99A'
+                const settled   = Math.abs(row.balance) < 0.01
+                const owed      = row.balance > 0
+                const amtColor  = settled ? '#999AAA' : owed ? '#E8A838' : '#26B99A'
+                const statusLbl = owed ? 'owes you' : 'in credit'
+                const statusClr = owed ? '#C0830A' : '#26B99A'
+                const dotColor  = settled ? '#26B99A' : owed ? '#E8A838' : '#26B99A'
 
                 const studentKey  = `${row.user_id}:${row.child_id}`
                 const studentData = monthly?.byStudent[studentKey]
@@ -149,9 +150,6 @@ export function TeacherPaymentsPage() {
                       <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
                         {row.child_name}
                       </div>
-                      <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
-                        {fmtAmt(row.total_paid)} received total
-                      </div>
                       {studentTotal > 0 && (
                         <>
                           <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
@@ -159,7 +157,7 @@ export function TeacherPaymentsPage() {
                           </div>
                           <div className="flex justify-between mt-1">
                             <span className="text-[10px]" style={{ color: '#26B99A' }}>
-                              {fmtAmt(studentData!.realizedAmount)} done
+                              {fmtAmt(studentData!.realizedAmount)} completed
                             </span>
                             <span className="text-[10px]" style={{ color: '#999AAA' }}>
                               {fmtAmt(studentData!.scheduledAmount)} upcoming
@@ -170,9 +168,16 @@ export function TeacherPaymentsPage() {
                     </div>
 
                     <div className="text-right flex-shrink-0">
-                      <div className="text-[13px] font-semibold" style={{ color: amtColor, fontVariantNumeric: 'tabular-nums' }}>
-                        {amtLabel}
-                      </div>
+                      {settled ? (
+                        <div className="text-[13px] font-semibold" style={{ color: '#999AAA' }}>Settled</div>
+                      ) : (
+                        <>
+                          <div className="text-[13px] font-semibold" style={{ color: amtColor, fontVariantNumeric: 'tabular-nums' }}>
+                            {fmtAmt(row.balance)}
+                          </div>
+                          <div className="text-[10px] mt-0.5" style={{ color: statusClr }}>{statusLbl}</div>
+                        </>
+                      )}
                     </div>
 
                     <div className="w-1.5 h-6 rounded-full flex-shrink-0" style={{ background: dotColor }} />
@@ -183,7 +188,9 @@ export function TeacherPaymentsPage() {
 
               {/* Upcoming-only rows */}
               {upcomingOnly.map((student, i) => {
-                const borderTop = (rows.length > 0 || i > 0) ? '0.5px solid #E8E8EC' : 'none'
+                const borderTop   = (rows.length > 0 || i > 0) ? '0.5px solid #E8E8EC' : 'none'
+                const studentTotal = student.realizedAmount + student.scheduledAmount
+                const studentPct   = studentTotal > 0 ? (student.realizedAmount / studentTotal) * 100 : 0
                 return (
                   <button
                     key={`${student.user_id}:${student.child_id}`}
@@ -202,18 +209,24 @@ export function TeacherPaymentsPage() {
                       <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
                         {student.child_name}
                       </div>
-                      <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
-                        No payment history yet
+                      <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
+                        <div className="h-full rounded-full" style={{ width: `${studentPct}%`, background: '#26B99A' }} />
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[10px]" style={{ color: '#26B99A' }}>
+                          {fmtAmt(student.realizedAmount)} completed
+                        </span>
+                        <span className="text-[10px]" style={{ color: '#999AAA' }}>
+                          {fmtAmt(student.scheduledAmount)} upcoming
+                        </span>
                       </div>
                     </div>
 
                     <div className="text-right flex-shrink-0">
-                      <div className="text-[13px] font-semibold" style={{ color: '#1A1A2E', fontVariantNumeric: 'tabular-nums' }}>
-                        {fmtAmt(student.scheduledAmount)}
-                      </div>
-                      <div className="text-[10px] mt-0.5" style={{ color: '#999AAA' }}>upcoming</div>
+                      <div className="text-[13px] font-semibold" style={{ color: '#999AAA' }}>Settled</div>
                     </div>
 
+                    <div className="w-1.5 h-6 rounded-full flex-shrink-0" style={{ background: '#26B99A' }} />
                     <i className="ti ti-chevron-right flex-shrink-0" style={{ fontSize: 14, color: '#999AAA' }} />
                   </button>
                 )

@@ -257,7 +257,7 @@ export function PaymentsPage() {
       const child = children.find(c => c.id === childId)
       const ut    = savedTeachers.find(ut => ut.teacher_id === teacherId)
       if (!child || !ut?.teacher) return []
-      return [{ child, teacher: ut.teacher, scheduledAmount: data.scheduledAmount }]
+      return [{ child, teacher: ut.teacher, scheduledAmount: data.scheduledAmount, realizedAmount: data.realizedAmount }]
     })
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -292,7 +292,7 @@ export function PaymentsPage() {
                     <div className="text-[22px] font-bold leading-none" style={{ color: '#26B99A', fontVariantNumeric: 'tabular-nums' }}>
                       {fmtAmt(realizedThisMonth)}
                     </div>
-                    <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>done</div>
+                    <div className="text-[11px] mt-0.5" style={{ color: '#26B99A' }}>completed</div>
                   </div>
                   <div className="text-right">
                     <div className="text-[22px] font-bold leading-none" style={{ color: '#999AAA', fontVariantNumeric: 'tabular-nums' }}>
@@ -352,10 +352,9 @@ export function PaymentsPage() {
                     const settled = Math.abs(b.balance) < 0.01
                     const owed    = b.balance > 0
 
-                    const amtLabel  = settled ? fmtAmt(0) : owed ? fmtAmt(b.balance) : `${fmtAmt(b.balance)} credit`
-                    const amtColor  = settled ? '#999AAA' : owed ? '#E8A838' : '#26B99A'
-                    const statusLbl = settled ? 'Settled' : owed ? 'You owe' : 'In credit'
-                    const statusClr = settled ? '#999AAA' : owed ? '#C0830A' : '#26B99A'
+                    const amtColor  = owed ? '#E8A838' : '#26B99A'
+                    const statusLbl = owed ? 'you owe' : 'in credit'
+                    const statusClr = owed ? '#C0830A' : '#26B99A'
 
                     const pairKey  = `${b.child.id}:${b.teacher.id}`
                     const pairData = monthByPair[pairKey]
@@ -395,7 +394,7 @@ export function PaymentsPage() {
                               </div>
                               <div className="flex justify-between mt-1">
                                 <span className="text-[10px]" style={{ color: '#26B99A' }}>
-                                  {fmtAmt(pairData!.realizedAmount)} done
+                                  {fmtAmt(pairData!.realizedAmount)} completed
                                 </span>
                                 <span className="text-[10px]" style={{ color: '#999AAA' }}>
                                   {fmtAmt(pairData!.scheduledAmount)} upcoming
@@ -407,10 +406,16 @@ export function PaymentsPage() {
 
                         {/* Amount + status */}
                         <div className="text-right flex-shrink-0">
-                          <div className="text-[13px] font-semibold" style={{ color: amtColor, fontVariantNumeric: 'tabular-nums' }}>
-                            {amtLabel}
-                          </div>
-                          <div className="text-[10px] mt-0.5" style={{ color: statusClr }}>{statusLbl}</div>
+                          {settled ? (
+                            <div className="text-[13px] font-semibold" style={{ color: '#999AAA' }}>Settled</div>
+                          ) : (
+                            <>
+                              <div className="text-[13px] font-semibold" style={{ color: amtColor, fontVariantNumeric: 'tabular-nums' }}>
+                                {fmtAmt(b.balance)}
+                              </div>
+                              <div className="text-[10px] mt-0.5" style={{ color: statusClr }}>{statusLbl}</div>
+                            </>
+                          )}
                         </div>
 
                         <i className="ti ti-chevron-right flex-shrink-0" style={{ fontSize: 14, color: '#999AAA' }} />
@@ -434,9 +439,11 @@ export function PaymentsPage() {
               )}
               <div className="rounded-[14px] overflow-hidden" style={{ border: '0.5px solid #E8E8EC' }}>
                 {upcomingOnlyRows.map((row, i) => {
-                  const color = getChildColor(row.child.display_order)
-                  const hex   = CHILD_COLOR_HEX[color]
-                  const bg    = CHILD_COLOR_BG[color]
+                  const color     = getChildColor(row.child.display_order)
+                  const hex       = CHILD_COLOR_HEX[color]
+                  const bg        = CHILD_COLOR_BG[color]
+                  const pairTotal = row.realizedAmount + row.scheduledAmount
+                  const pairPct   = pairTotal > 0 ? (row.realizedAmount / pairTotal) * 100 : 0
                   return (
                     <button
                       key={`${row.child.id}:${row.teacher.id}`}
@@ -455,12 +462,20 @@ export function PaymentsPage() {
                           {row.teacher.subject} · {row.teacher.name}
                         </div>
                         <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>{row.child.name}</div>
+                        <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
+                          <div className="h-full rounded-full" style={{ width: `${pairPct}%`, background: '#26B99A' }} />
+                        </div>
+                        <div className="flex justify-between mt-1">
+                          <span className="text-[10px]" style={{ color: '#26B99A' }}>
+                            {fmtAmt(row.realizedAmount)} completed
+                          </span>
+                          <span className="text-[10px]" style={{ color: '#999AAA' }}>
+                            {fmtAmt(row.scheduledAmount)} upcoming
+                          </span>
+                        </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <div className="text-[13px] font-semibold" style={{ color: '#1A1A2E', fontVariantNumeric: 'tabular-nums' }}>
-                          {fmtAmt(row.scheduledAmount)}
-                        </div>
-                        <div className="text-[10px] mt-0.5" style={{ color: '#999AAA' }}>upcoming</div>
+                        <div className="text-[13px] font-semibold" style={{ color: '#999AAA' }}>Settled</div>
                       </div>
                       <i className="ti ti-chevron-right flex-shrink-0" style={{ fontSize: 14, color: '#999AAA' }} />
                     </button>
