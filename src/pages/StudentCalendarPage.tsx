@@ -30,6 +30,15 @@ const CHILD_COLOR_BADGE: Record<string, string> = {
   amber:  '#F5DFA0',
 }
 
+function compareSessions(a: Session, b: Session): number {
+  return (
+    a.starts_at.localeCompare(b.starts_at) ||
+    (a.child?.name ?? '').localeCompare(b.child?.name ?? '') ||
+    (a.teacher?.name ?? a.title ?? '').localeCompare(b.teacher?.name ?? b.title ?? '') ||
+    a.id.localeCompare(b.id)
+  )
+}
+
 // ─── Activity dot ─────────────────────────────────────────────────────────────
 
 function ActivityDot({ colors }: { colors: string[] }) {
@@ -786,6 +795,7 @@ export function StudentCalendarPage() {
   const visibleIncompleteSessions = selectedChildId
     ? incompleteSessions.filter(s => s.child_id === selectedChildId)
     : incompleteSessions
+  const sortedVisibleIncompleteSessions = [...visibleIncompleteSessions].sort(compareSessions)
   const totalIncomplete = visibleIncompleteSessions.length
 
   function dotColorsForDay(day: Date): string[] {
@@ -800,7 +810,7 @@ export function StudentCalendarPage() {
     const key = format(day, 'yyyy-MM-dd')
     const daySessions = displaySessions
       .filter(s => isSameDay(parseISO(s.starts_at), day))
-      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
+      .sort(compareSessions)
     return { day, key, sessions: daySessions }
   })
 
@@ -868,7 +878,7 @@ export function StudentCalendarPage() {
   }
 
   function jumpToFirstIncomplete() {
-    const target = visibleIncompleteSessions[0]
+    const target = sortedVisibleIncompleteSessions[0]
     if (!target) return
     const targetWeek = startOfWeek(parseISO(target.starts_at), { weekStartsOn: 0 })
     jumpToWeek(targetWeek)
@@ -1180,7 +1190,7 @@ export function StudentCalendarPage() {
                     day,
                     sessions: nextWeekSessions
                       .filter(s => isSameDay(parseISO(s.starts_at), day))
-                      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()),
+                      .sort(compareSessions),
                   }))
                   .filter(g => g.sessions.length > 0)
                 return (

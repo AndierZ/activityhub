@@ -21,6 +21,14 @@ function fmtPrice(price: number): string {
   return `$${price.toFixed(2).replace(/\.00$/, '')}`
 }
 
+function compareTeacherSessions(a: TeacherSessionRow, b: TeacherSessionRow): number {
+  return (
+    a.starts_at.localeCompare(b.starts_at) ||
+    a.child.name.localeCompare(b.child.name) ||
+    a.id.localeCompare(b.id)
+  )
+}
+
 // ─── Session card ─────────────────────────────────────────────────────────────
 
 function sessionsOverlap(a: TeacherSessionRow, b: TeacherSessionRow): boolean {
@@ -500,7 +508,7 @@ export function TeacherCalendarPage() {
       day,
       sessions: displayDispSessions
         .filter(s => isSameDay(parseISO(s.starts_at), day))
-        .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
+        .sort(compareTeacherSessions),
     }))
     .filter(g => g.sessions.length > 0)
 
@@ -707,7 +715,7 @@ export function TeacherCalendarPage() {
                   day,
                   sessions: dispNextWeekSessions
                     .filter(s => isSameDay(parseISO(s.starts_at), day))
-                    .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
+                    .sort(compareTeacherSessions),
                 }))
                 .filter(g => g.sessions.length > 0)
 
