@@ -207,7 +207,9 @@ export function PaymentsPage() {
   const [savedTeachers,  setSavedTeachers]  = useState<UserTeacher[]>([])
   const [scheduledThisMonth, setScheduledThisMonth] = useState(0)
   const [realizedThisMonth,  setRealizedThisMonth]  = useState(0)
-  const [monthByPair,        setMonthByPair]        = useState<Record<string, { scheduledAmount: number; realizedAmount: number }>>({})
+  const [scheduledCount,     setScheduledCount]     = useState(0)
+  const [realizedCount,      setRealizedCount]      = useState(0)
+  const [monthByPair,        setMonthByPair]        = useState<Record<string, { scheduledAmount: number; realizedAmount: number; scheduledCount: number; realizedCount: number }>>({})
 
   const [loading,        setLoading]        = useState(true)
   const [showLogForm,    setShowLogForm]    = useState(false)
@@ -236,6 +238,8 @@ export function PaymentsPage() {
       setSavedTeachers(teachersData)
       setScheduledThisMonth(sessionSummary.scheduledAmount)
       setRealizedThisMonth(sessionSummary.realizedAmount)
+      setScheduledCount(sessionSummary.scheduledCount)
+      setRealizedCount(sessionSummary.realizedCount)
       setMonthByPair(sessionSummary.byPair)
     } catch (err) {
       console.error(err)
@@ -257,7 +261,7 @@ export function PaymentsPage() {
       const child = children.find(c => c.id === childId)
       const ut    = savedTeachers.find(ut => ut.teacher_id === teacherId)
       if (!child || !ut?.teacher) return []
-      return [{ child, teacher: ut.teacher, scheduledAmount: data.scheduledAmount, realizedAmount: data.realizedAmount }]
+      return [{ child, teacher: ut.teacher, scheduledAmount: data.scheduledAmount, realizedAmount: data.realizedAmount, scheduledCount: data.scheduledCount, realizedCount: data.realizedCount }]
     })
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -292,13 +296,13 @@ export function PaymentsPage() {
                     <div className="text-[22px] font-bold leading-none" style={{ color: '#26B99A', fontVariantNumeric: 'tabular-nums' }}>
                       {fmtAmt(realizedThisMonth)}
                     </div>
-                    <div className="text-[11px] mt-0.5" style={{ color: '#26B99A' }}>completed</div>
+                    <div className="text-[11px] mt-0.5" style={{ color: '#26B99A' }}>{realizedCount} completed</div>
                   </div>
                   <div className="text-right">
                     <div className="text-[22px] font-bold leading-none" style={{ color: '#999AAA', fontVariantNumeric: 'tabular-nums' }}>
                       {fmtAmt(scheduledThisMonth)}
                     </div>
-                    <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>upcoming</div>
+                    <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>{scheduledCount} upcoming</div>
                   </div>
                 </div>
                 <div className="h-[5px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
@@ -365,60 +369,68 @@ export function PaymentsPage() {
                       <button
                         key={pairKey}
                         onClick={() => navigate(`/payments/${b.child.id}/${b.teacher.id}`)}
-                        className="w-full flex items-center gap-3 px-3.5 py-3"
+                        className="w-full flex flex-col px-3.5 py-3 text-left"
                         style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none', background: '#fff' }}
                       >
-                        {/* Subject icon */}
+                        {/* Top row: icon + info + chevron */}
+                        <div className="flex items-center gap-3 w-full">
+                          <div
+                            className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0"
+                            style={{ background: bg }}
+                          >
+                            <i className={`ti ${subjectIcon(b.teacher.subject)}`} style={{ fontSize: 16, color: hex }} />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
+                              {b.teacher.subject} · {b.teacher.name}
+                            </div>
+                            <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
+                              {b.child.name}
+                            </div>
+                            {pairTotal > 0 && (
+                              <>
+                                <div className="flex justify-between mt-1.5">
+                                  <div className="flex flex-col">
+                                    <span className="text-[11px] font-semibold" style={{ color: '#26B99A', fontVariantNumeric: 'tabular-nums' }}>{fmtAmt(pairData!.realizedAmount)}</span>
+                                    <span className="text-[10px]" style={{ color: '#26B99A' }}>{pairData!.realizedCount} completed</span>
+                                  </div>
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-[11px] font-semibold" style={{ color: '#999AAA', fontVariantNumeric: 'tabular-nums' }}>{fmtAmt(pairData!.scheduledAmount)}</span>
+                                    <span className="text-[10px]" style={{ color: '#999AAA' }}>{pairData!.scheduledCount} upcoming</span>
+                                  </div>
+                                </div>
+                                <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
+                                  <div className="h-full rounded-full" style={{ width: `${pairPct}%`, background: '#26B99A' }} />
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <i className="ti ti-chevron-right" style={{ fontSize: 14, color: '#999AAA' }} />
+                          </div>
+                        </div>
+
+                        {/* Balance row */}
                         <div
-                          className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0"
-                          style={{ background: bg }}
+                          className="flex items-center justify-between w-full mt-2.5 pt-2"
+                          style={{ borderTop: '0.5px solid #F0F0F4' }}
                         >
-                          <i className={`ti ${subjectIcon(b.teacher.subject)}`} style={{ fontSize: 16, color: hex }} />
-                        </div>
-
-                        {/* Info + mini bar */}
-                        <div className="flex-1 min-w-0 text-left">
-                          <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
-                            {b.teacher.subject} · {b.teacher.name}
-                          </div>
-                          <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
-                            {b.child.name}
-                          </div>
-                          {pairTotal > 0 && (
-                            <>
-                              <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
-                                <div
-                                  className="h-full rounded-full"
-                                  style={{ width: `${pairPct}%`, background: '#26B99A' }}
-                                />
-                              </div>
-                              <div className="flex justify-between mt-1">
-                                <span className="text-[10px]" style={{ color: '#26B99A' }}>
-                                  {fmtAmt(pairData!.realizedAmount)} completed
-                                </span>
-                                <span className="text-[10px]" style={{ color: '#999AAA' }}>
-                                  {fmtAmt(pairData!.scheduledAmount)} upcoming
-                                </span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        {/* Amount + status */}
-                        <div className="text-right flex-shrink-0">
+                          <span className="text-[11px]" style={{ color: '#C8C8D0' }}>
+                            Balance · completed sessions
+                          </span>
                           {settled ? (
-                            <div className="text-[13px] font-semibold" style={{ color: '#999AAA' }}>Settled</div>
+                            <span className="text-[11px] font-medium" style={{ color: '#999AAA' }}>Settled</span>
                           ) : (
-                            <>
-                              <div className="text-[13px] font-semibold" style={{ color: amtColor, fontVariantNumeric: 'tabular-nums' }}>
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-[13px] font-semibold" style={{ color: amtColor, fontVariantNumeric: 'tabular-nums' }}>
                                 {fmtAmt(b.balance)}
-                              </div>
-                              <div className="text-[10px] mt-0.5" style={{ color: statusClr }}>{statusLbl}</div>
-                            </>
+                              </span>
+                              <span className="text-[10px]" style={{ color: statusClr }}>{statusLbl}</span>
+                            </div>
                           )}
                         </div>
-
-                        <i className="ti ti-chevron-right flex-shrink-0" style={{ fontSize: 14, color: '#999AAA' }} />
                       </button>
                     )
                   })}
@@ -448,36 +460,46 @@ export function PaymentsPage() {
                     <button
                       key={`${row.child.id}:${row.teacher.id}`}
                       onClick={() => navigate(`/payments/${row.child.id}/${row.teacher.id}`)}
-                      className="w-full flex items-center gap-3 px-3.5 py-3"
+                      className="w-full flex flex-col px-3.5 py-3 text-left"
                       style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none', background: '#fff' }}
                     >
+                      {/* Top row */}
+                      <div className="flex items-center gap-3 w-full">
+                        <div
+                          className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0"
+                          style={{ background: bg }}
+                        >
+                          <i className={`ti ${subjectIcon(row.teacher.subject)}`} style={{ fontSize: 16, color: hex }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
+                            {row.teacher.subject} · {row.teacher.name}
+                          </div>
+                          <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>{row.child.name}</div>
+                          <div className="flex justify-between mt-1.5">
+                            <div className="flex flex-col">
+                              <span className="text-[11px] font-semibold" style={{ color: '#26B99A', fontVariantNumeric: 'tabular-nums' }}>{fmtAmt(row.realizedAmount)}</span>
+                              <span className="text-[10px]" style={{ color: '#26B99A' }}>{row.realizedCount} completed</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-[11px] font-semibold" style={{ color: '#999AAA', fontVariantNumeric: 'tabular-nums' }}>{fmtAmt(row.scheduledAmount)}</span>
+                              <span className="text-[10px]" style={{ color: '#999AAA' }}>{row.scheduledCount} upcoming</span>
+                            </div>
+                          </div>
+                          <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
+                            <div className="h-full rounded-full" style={{ width: `${pairPct}%`, background: '#26B99A' }} />
+                          </div>
+                        </div>
+                        <i className="ti ti-chevron-right flex-shrink-0" style={{ fontSize: 14, color: '#999AAA' }} />
+                      </div>
+                      {/* Balance row */}
                       <div
-                        className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0"
-                        style={{ background: bg }}
+                        className="flex items-center justify-between w-full mt-2.5 pt-2"
+                        style={{ borderTop: '0.5px solid #F0F0F4' }}
                       >
-                        <i className={`ti ${subjectIcon(row.teacher.subject)}`} style={{ fontSize: 16, color: hex }} />
+                        <span className="text-[11px]" style={{ color: '#C8C8D0' }}>Balance · completed sessions</span>
+                        <span className="text-[11px] font-medium" style={{ color: '#999AAA' }}>Settled</span>
                       </div>
-                      <div className="flex-1 min-w-0 text-left">
-                        <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
-                          {row.teacher.subject} · {row.teacher.name}
-                        </div>
-                        <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>{row.child.name}</div>
-                        <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
-                          <div className="h-full rounded-full" style={{ width: `${pairPct}%`, background: '#26B99A' }} />
-                        </div>
-                        <div className="flex justify-between mt-1">
-                          <span className="text-[10px]" style={{ color: '#26B99A' }}>
-                            {fmtAmt(row.realizedAmount)} completed
-                          </span>
-                          <span className="text-[10px]" style={{ color: '#999AAA' }}>
-                            {fmtAmt(row.scheduledAmount)} upcoming
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <div className="text-[13px] font-semibold" style={{ color: '#999AAA' }}>Settled</div>
-                      </div>
-                      <i className="ti ti-chevron-right flex-shrink-0" style={{ fontSize: 14, color: '#999AAA' }} />
                     </button>
                   )
                 })}

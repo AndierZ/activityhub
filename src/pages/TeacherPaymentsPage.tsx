@@ -77,13 +77,13 @@ export function TeacherPaymentsPage() {
                   <div className="text-[22px] font-bold leading-none" style={{ color: '#26B99A', fontVariantNumeric: 'tabular-nums' }}>
                     {fmtAmt(realized)}
                   </div>
-                  <div className="text-[11px] mt-0.5" style={{ color: '#26B99A' }}>completed</div>
+                  <div className="text-[11px] mt-0.5" style={{ color: '#26B99A' }}>{monthly?.realizedCount ?? 0} completed</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[22px] font-bold leading-none" style={{ color: '#999AAA', fontVariantNumeric: 'tabular-nums' }}>
                     {fmtAmt(scheduled)}
                   </div>
-                  <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>upcoming</div>
+                  <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>{monthly?.scheduledCount ?? 0} upcoming</div>
                 </div>
               </div>
               <div className="h-[5px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
@@ -152,16 +152,18 @@ export function TeacherPaymentsPage() {
                       </div>
                       {studentTotal > 0 && (
                         <>
+                          <div className="flex justify-between mt-1.5">
+                            <div className="flex flex-col">
+                              <span className="text-[11px] font-semibold" style={{ color: '#26B99A', fontVariantNumeric: 'tabular-nums' }}>{fmtAmt(studentData!.realizedAmount)}</span>
+                              <span className="text-[10px]" style={{ color: '#26B99A' }}>{studentData!.realizedCount} completed</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-[11px] font-semibold" style={{ color: '#999AAA', fontVariantNumeric: 'tabular-nums' }}>{fmtAmt(studentData!.scheduledAmount)}</span>
+                              <span className="text-[10px]" style={{ color: '#999AAA' }}>{studentData!.scheduledCount} upcoming</span>
+                            </div>
+                          </div>
                           <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
                             <div className="h-full rounded-full" style={{ width: `${studentPct}%`, background: '#26B99A' }} />
-                          </div>
-                          <div className="flex justify-between mt-1">
-                            <span className="text-[10px]" style={{ color: '#26B99A' }}>
-                              {fmtAmt(studentData!.realizedAmount)} completed
-                            </span>
-                            <span className="text-[10px]" style={{ color: '#999AAA' }}>
-                              {fmtAmt(studentData!.scheduledAmount)} upcoming
-                            </span>
                           </div>
                         </>
                       )}
@@ -209,16 +211,18 @@ export function TeacherPaymentsPage() {
                       <div className="text-[13px] font-medium truncate" style={{ color: '#1A1A2E' }}>
                         {student.child_name}
                       </div>
+                      <div className="flex justify-between mt-1.5">
+                        <div className="flex flex-col">
+                          <span className="text-[11px] font-semibold" style={{ color: '#26B99A', fontVariantNumeric: 'tabular-nums' }}>{fmtAmt(student.realizedAmount)}</span>
+                          <span className="text-[10px]" style={{ color: '#26B99A' }}>{student.realizedCount} completed</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-[11px] font-semibold" style={{ color: '#999AAA', fontVariantNumeric: 'tabular-nums' }}>{fmtAmt(student.scheduledAmount)}</span>
+                          <span className="text-[10px]" style={{ color: '#999AAA' }}>{student.scheduledCount} upcoming</span>
+                        </div>
+                      </div>
                       <div className="mt-1.5 h-[3px] rounded-full overflow-hidden" style={{ background: '#E8E8EC' }}>
                         <div className="h-full rounded-full" style={{ width: `${studentPct}%`, background: '#26B99A' }} />
-                      </div>
-                      <div className="flex justify-between mt-1">
-                        <span className="text-[10px]" style={{ color: '#26B99A' }}>
-                          {fmtAmt(student.realizedAmount)} completed
-                        </span>
-                        <span className="text-[10px]" style={{ color: '#999AAA' }}>
-                          {fmtAmt(student.scheduledAmount)} upcoming
-                        </span>
                       </div>
                     </div>
 

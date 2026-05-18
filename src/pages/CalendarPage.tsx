@@ -892,13 +892,14 @@ export function CalendarPage() {
                       </div>
                       <div className="px-5 py-2">
                         {daySessions.map(s => (
-                          <SessionBlock
-                            key={s.id}
-                            session={s}
-                            allChildren={children}
-                            hasConflict={false}
-                            onSelect={() => jumpToWeek(nextWeekStart!)}
-                          />
+                          <div key={s.id} style={{ opacity: 0.5 }}>
+                            <SessionBlock
+                              session={s}
+                              allChildren={children}
+                              hasConflict={false}
+                              onSelect={() => jumpToWeek(nextWeekStart!)}
+                            />
+                          </div>
                         ))}
                       </div>
                     </div>

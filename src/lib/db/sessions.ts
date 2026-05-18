@@ -105,7 +105,9 @@ export async function getLatestSessionDefaults(
 export interface MonthlySessionSummary {
   scheduledAmount: number
   realizedAmount:  number
-  byPair: Record<string, { scheduledAmount: number; realizedAmount: number }>
+  scheduledCount:  number
+  realizedCount:   number
+  byPair: Record<string, { scheduledAmount: number; realizedAmount: number; scheduledCount: number; realizedCount: number }>
 }
 
 export async function getMonthlySessionSummary(
@@ -124,23 +126,29 @@ export async function getMonthlySessionSummary(
 
   let scheduledAmount = 0
   let realizedAmount  = 0
+  let scheduledCount  = 0
+  let realizedCount   = 0
   const byPair: MonthlySessionSummary['byPair'] = {}
 
   for (const s of data ?? []) {
     if (!s.teacher_id) continue  // free-form sessions have no balance
     const key = `${s.child_id}:${s.teacher_id}`
-    if (!byPair[key]) byPair[key] = { scheduledAmount: 0, realizedAmount: 0 }
+    if (!byPair[key]) byPair[key] = { scheduledAmount: 0, realizedAmount: 0, scheduledCount: 0, realizedCount: 0 }
 
     if (s.status === 'scheduled') {
-      scheduledAmount          += Number(s.price)
+      scheduledAmount             += Number(s.price)
+      scheduledCount              += 1
       byPair[key].scheduledAmount += Number(s.price)
+      byPair[key].scheduledCount  += 1
     } else if (s.status === 'completed') {
-      realizedAmount           += Number(s.price)
-      byPair[key].realizedAmount  += Number(s.price)
+      realizedAmount             += Number(s.price)
+      realizedCount              += 1
+      byPair[key].realizedAmount += Number(s.price)
+      byPair[key].realizedCount  += 1
     }
   }
 
-  return { scheduledAmount, realizedAmount, byPair }
+  return { scheduledAmount, realizedAmount, scheduledCount, realizedCount, byPair }
 }
 
 // ─── Teacher confirmation ─────────────────────────────────────────────────────

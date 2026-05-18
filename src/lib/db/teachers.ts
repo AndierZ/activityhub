@@ -271,12 +271,16 @@ export async function getTeacherPaymentHistory(teacherId: string): Promise<Teach
 export interface TeacherMonthlySummary {
   realizedThisMonth:  number
   scheduledThisMonth: number
+  realizedCount:      number
+  scheduledCount:     number
   byStudent: Record<string, {  // key: `${user_id}:${child_id}`
     user_id:         string
     child_id:        string
     child_name:      string
     realizedAmount:  number
     scheduledAmount: number
+    realizedCount:   number
+    scheduledCount:  number
   }>
 }
 
@@ -296,6 +300,8 @@ export async function getTeacherMonthlySummary(
 
   let realizedThisMonth  = 0
   let scheduledThisMonth = 0
+  let realizedCount      = 0
+  let scheduledCount     = 0
   const byStudent: TeacherMonthlySummary['byStudent'] = {}
 
   for (const s of data ?? []) {
@@ -308,18 +314,24 @@ export async function getTeacherMonthlySummary(
         child_name:      child?.name ?? 'Unknown',
         realizedAmount:  0,
         scheduledAmount: 0,
+        realizedCount:   0,
+        scheduledCount:  0,
       }
     }
     if (s.status === 'completed') {
       realizedThisMonth             += Number(s.price)
+      realizedCount                 += 1
       byStudent[key].realizedAmount += Number(s.price)
+      byStudent[key].realizedCount  += 1
     } else if (s.status === 'scheduled') {
       scheduledThisMonth              += Number(s.price)
+      scheduledCount                  += 1
       byStudent[key].scheduledAmount  += Number(s.price)
+      byStudent[key].scheduledCount   += 1
     }
   }
 
-  return { realizedThisMonth, scheduledThisMonth, byStudent }
+  return { realizedThisMonth, scheduledThisMonth, realizedCount, scheduledCount, byStudent }
 }
 
 // ─── Crowdsourced schedule ────────────────────────────────────────────────────
