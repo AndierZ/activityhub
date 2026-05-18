@@ -502,24 +502,6 @@ export function LogPage() {
             )
           })}
 
-          {/* Can't find teacher */}
-          <div
-            className="flex items-center gap-3 px-3.5 py-3 rounded-[14px]"
-            style={{ background: '#F5F5F7', border: '0.5px solid #E8E8EC' }}
-          >
-            <i className="ti ti-info-circle flex-shrink-0" style={{ fontSize: 16, color: '#999AAA' }} />
-            <p className="text-[12px] leading-relaxed" style={{ color: '#555566' }}>
-              Can't find your teacher?{' '}
-              <a
-                href="mailto:zian.xu42@gmail.com?subject=Add%20a%20teacher%20to%20ActivityHub"
-                style={{ color: '#7C6EE6', fontWeight: 500 }}
-              >
-                Let us know
-              </a>{' '}
-              and we'll add them to the directory.
-            </p>
-          </div>
-
           {/* No teacher option */}
           <button
             onClick={() => { setNoTeacher(true); setSelectedTeacher(null) }}

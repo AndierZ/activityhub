@@ -774,6 +774,32 @@ export function TeachersPage() {
           </div>
         )}
 
+        {/* Can't find teacher */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            background: '#F5F5F7',
+            border: '1px solid #E8E8EC',
+            borderRadius: 14,
+            padding: '12px 14px',
+            marginBottom: 20,
+          }}
+        >
+          <i className="ti ti-info-circle" style={{ fontSize: 16, color: '#999AAA', flexShrink: 0 }} />
+          <p style={{ fontSize: 12, lineHeight: 1.5, color: '#555566', margin: 0 }}>
+            Can't find your teacher?{' '}
+            <a
+              href="mailto:support@edgewaterland.com?subject=ActivityHub%20-%20New%20Teacher%20Request"
+              style={{ color: '#7C6EE6', fontWeight: 500 }}
+            >
+              Let us know
+            </a>{' '}
+            and we'll add them to the directory.
+          </p>
+        </div>
+
         {/* My teachers section */}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
