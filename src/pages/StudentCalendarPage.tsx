@@ -77,11 +77,13 @@ function SessionBlock({
   allChildren,
   hasConflict,
   onSelect,
+  onComplete,
 }: {
   session: Session
   allChildren: Child[]
   hasConflict: boolean
   onSelect: (session: Session) => void
+  onComplete?: (session: Session) => void
 }) {
   const child = allChildren.find(c => c.id === session.child_id)
   if (!child) return null
@@ -99,6 +101,8 @@ function SessionBlock({
   const title     = session.teacher
     ? [session.teacher.subject, session.teacher.name].filter(Boolean).join(' · ')
     : (session.title ?? 'Activity')
+  const completed = session.status === 'completed'
+  const confirmed = !!session.teacher_confirmed_at
 
   const blockStyle = hasConflict
     ? {
@@ -114,39 +118,38 @@ function SessionBlock({
       }
 
   return (
-    <button
-      onClick={() => onSelect(session)}
-      className="w-full text-left rounded-[10px] px-2.5 py-2 mb-1.5 relative"
+    <div
+      className="w-full rounded-[10px] px-2.5 py-2 mb-1.5 relative flex items-center gap-2"
       style={blockStyle}
     >
-      {/* Child badge — top right */}
-      <span
-        className="absolute top-1.5 right-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
-        style={{ background: badge, color: hex }}
-      >
-        {child.name}
-      </span>
-
-      <div className="text-[13px] font-semibold pr-14" style={{ color: '#1A1A2E' }}>
-        {title}
-      </div>
-      <div className="text-[11px] mt-0.5" style={{ color: '#555566' }}>
-        {subtitle}
-      </div>
-
-      {session.status === 'completed' && (
-        <div className="inline-flex items-center gap-1 mt-1 text-[11px]" style={{ color: '#0F6E56' }}>
-          <i className="ti ti-check" style={{ fontSize: 11 }} />
-          Completed
+      <button className="flex-1 min-w-0 text-left" onClick={() => onSelect(session)}>
+        <div className="flex items-center gap-2">
+          <div className="text-[13px] font-semibold truncate" style={{ color: '#1A1A2E' }}>
+            {title}
+          </div>
+          <span
+            className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
+            style={{ background: badge, color: hex }}
+          >
+            {child.name}
+          </span>
         </div>
-      )}
-
-      {session.teacher_confirmed_at && session.status !== 'completed' && (
-        <div className="inline-flex items-center gap-1 mt-1 text-[11px]" style={{ color: '#1A8A73' }}>
-          <i className="ti ti-circle-check" style={{ fontSize: 11 }} />
-          Teacher confirmed
+        <div className="text-[11px] mt-0.5" style={{ color: '#555566' }}>
+          {subtitle}
         </div>
-      )}
+
+        <div className="flex items-center gap-1.5 mt-1" aria-label={`Completed ${completed ? 'yes' : 'no'}, teacher confirmed ${confirmed ? 'yes' : 'no'}`}>
+          <i
+            className="ti ti-circle-check"
+            title="Student completed"
+            style={{ fontSize: 13, color: completed ? '#26B99A' : '#C8C8D0' }}
+          />
+          <i
+            className="ti ti-user-check"
+            title="Teacher confirmed"
+            style={{ fontSize: 13, color: confirmed ? '#7C6EE6' : '#C8C8D0' }}
+          />
+        </div>
 
       {hasConflict && (
         <div className="flex items-center gap-1 mt-1 text-[11px]" style={{ color: '#B87A10' }}>
@@ -154,7 +157,19 @@ function SessionBlock({
           Another student also logged this time
         </div>
       )}
-    </button>
+      </button>
+
+      {!completed && onComplete && (
+        <button
+          onClick={() => onComplete(session)}
+          className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
+          style={{ background: '#26B99A', color: '#fff' }}
+        >
+          <i className="ti ti-check" style={{ fontSize: 12 }} />
+          Complete
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -189,6 +204,8 @@ function SessionActionSheet({
   const end = parseISO(session.ends_at)
   const durationMs = end.getTime() - start.getTime()
   const canSave = startsAt && Number(price) >= 0
+  const completed = session.status === 'completed'
+  const confirmed = !!session.teacher_confirmed_at
 
   async function handleSave() {
     if (!canSave || saving) return
@@ -272,7 +289,7 @@ function SessionActionSheet({
               {session.teacher?.subject} · {session.teacher?.name}
             </div>
             <div className="text-[12px] mt-0.5" style={{ color: '#555566' }}>
-              {child?.name ?? 'Child'} · {session.status === 'completed' ? 'Completed' : 'Scheduled'}
+              {child?.name ?? 'Child'}
             </div>
           </div>
           <button
@@ -327,7 +344,6 @@ function SessionActionSheet({
               {[
                 ['Date and time', `${format(start, 'EEE, MMM d')} · ${format(start, 'h:mm')}-${format(end, 'h:mm a')}`],
                 ['Price', `$${Number(session.price).toFixed(2).replace(/\.00$/, '')}`],
-                ['Status', session.status === 'completed' ? 'Completed · included in payments' : 'Scheduled · not included in payments yet'],
               ].map(([label, value], i) => (
                 <div
                   key={label}
@@ -338,6 +354,28 @@ function SessionActionSheet({
                   <div className="text-[12px] font-medium text-right" style={{ color: '#1A1A2E' }}>{value}</div>
                 </div>
               ))}
+              <div className="flex items-center gap-3 px-3.5 py-3" style={{ borderTop: '0.5px solid #E8E8EC' }}>
+                <div className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: completed ? '#E0F7F2' : '#F5F5F7' }}>
+                  <i className="ti ti-circle-check" style={{ fontSize: 15, color: completed ? '#26B99A' : '#C8C8D0' }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-medium" style={{ color: completed ? '#1A8A73' : '#999AAA' }}>Student completed</div>
+                  <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
+                    {completed ? 'Included in payments' : 'Not included in payments yet'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-3.5 py-3" style={{ borderTop: '0.5px solid #E8E8EC' }}>
+                <div className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: confirmed ? '#EEEBfd' : '#F5F5F7' }}>
+                  <i className="ti ti-user-check" style={{ fontSize: 15, color: confirmed ? '#7C6EE6' : '#C8C8D0' }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-medium" style={{ color: confirmed ? '#7C6EE6' : '#999AAA' }}>Teacher confirmed</div>
+                  <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
+                    {confirmed ? 'Confirmed by teacher' : 'Not confirmed yet'}
+                  </div>
+                </div>
+              </div>
               {session.notes && (
                 <div className="px-3.5 py-3" style={{ borderTop: '0.5px solid #E8E8EC' }}>
                   <div className="text-[12px] mb-1" style={{ color: '#999AAA' }}>Notes</div>
@@ -867,6 +905,18 @@ export function StudentCalendarPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  async function handleCardComplete(session: Session) {
+    try {
+      await completeSession(session.id)
+      setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'completed' } : s))
+      setIncompleteSessions(prev => prev.filter(s => s.id !== session.id))
+      sessionCache.invalidate(weekStart)
+      setRefreshCounter(c => c + 1)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   // ── Swipe on week strip (vertical: swipe up = next, swipe down = prev) ───
   function onStripTouchStart(e: React.TouchEvent) {
     touchStartY.current = e.touches[0].clientY
@@ -1114,6 +1164,7 @@ export function StudentCalendarPage() {
                             allChildren={children}
                             hasConflict={conflictMap.get(s.id) ?? false}
                             onSelect={setSelectedSession}
+                            onComplete={handleCardComplete}
                           />
                         ))}
                       </div>

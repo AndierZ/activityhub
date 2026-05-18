@@ -45,13 +45,11 @@ function SessionCard({
   hasConflict,
   onSelect,
   onConfirm,
-  onUnconfirm,
 }: {
   session: TeacherSessionRow
   hasConflict: boolean
   onSelect: (s: TeacherSessionRow) => void
   onConfirm: (id: string) => void
-  onUnconfirm: (id: string) => void
 }) {
   const confirmed = !!session.teacher_confirmed_at
   const completed = session.status === 'completed'
@@ -68,20 +66,21 @@ function SessionCard({
           <span className="font-semibold text-[13px]" style={{ color: '#1A1A2E' }}>
             {session.child.name}
           </span>
-          {completed && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: '#C8F0E8', color: '#1A8A73' }}>
-              Completed
-            </span>
-          )}
-          {confirmed && !completed && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: '#E0F7F2', color: '#1A8A73' }}>
-              <i className="ti ti-check" style={{ fontSize: 10 }} />
-              Confirmed
-            </span>
-          )}
         </div>
         <div className="text-[12px] mt-0.5" style={{ color: '#555566' }}>
           {fmtTimeRange(session.starts_at, session.ends_at)}
+        </div>
+        <div className="flex items-center gap-1.5 mt-1" aria-label={`Student completed ${completed ? 'yes' : 'no'}, teacher confirmed ${confirmed ? 'yes' : 'no'}`}>
+          <i
+            className="ti ti-circle-check"
+            title="Student completed"
+            style={{ fontSize: 13, color: completed ? '#26B99A' : '#C8C8D0' }}
+          />
+          <i
+            className="ti ti-user-check"
+            title="Teacher confirmed"
+            style={{ fontSize: 13, color: confirmed ? '#7C6EE6' : '#C8C8D0' }}
+          />
         </div>
         {hasConflict && (
           <div className="flex items-center gap-1 mt-1 text-[11px]" style={{ color: '#B87A10' }}>
@@ -91,7 +90,7 @@ function SessionCard({
         )}
       </button>
 
-      {!confirmed ? (
+      {!confirmed && (
         <button
           onClick={e => { e.stopPropagation(); onConfirm(session.id) }}
           className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
@@ -99,15 +98,6 @@ function SessionCard({
         >
           <i className="ti ti-check" style={{ fontSize: 12 }} />
           Confirm
-        </button>
-      ) : (
-        <button
-          onClick={e => { e.stopPropagation(); onUnconfirm(session.id) }}
-          className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
-          style={{ background: '#fff', color: '#999AAA', border: '0.5px solid #E8E8EC' }}
-        >
-          <i className="ti ti-x" style={{ fontSize: 12 }} />
-          Unconfirm
         </button>
       )}
     </div>
@@ -130,39 +120,75 @@ function DetailSheet({
   onUnconfirm: (id: string) => void
 }) {
   const confirmed = !!session.teacher_confirmed_at
+  const completed = session.status === 'completed'
+  const start = parseISO(session.starts_at)
+  const end = parseISO(session.ends_at)
 
   return (
-    <>
-      <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.3)' }} onClick={onClose} />
-      <div
-        className="fixed bottom-0 left-1/2 z-50 w-full rounded-t-[20px] p-5"
-        style={{ transform: 'translateX(-50%)', maxWidth: 430, background: '#fff', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)' }}
-      >
-        <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ background: '#E8E8EC' }} />
-
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-[17px] font-bold" style={{ color: '#1A1A2E' }}>
-            {session.child.name}
+    <div className="absolute inset-0 z-20 flex flex-col justify-end" style={{ background: 'rgba(26,26,46,0.18)' }}>
+      <button className="flex-1" onClick={onClose} aria-label="Close session details" />
+      <div className="bg-white rounded-t-[18px] px-5 pt-4 pb-5 shadow-xl">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="flex-1 min-w-0">
+            <div className="text-[15px] font-semibold truncate" style={{ color: '#1A1A2E' }}>
+              {session.child.name}
+            </div>
+            <div className="text-[12px] mt-0.5" style={{ color: '#555566' }}>
+              {fmtTimeRange(session.starts_at, session.ends_at)}
+            </div>
           </div>
-          {confirmed && (
-            <span className="text-[11px] font-semibold px-2 py-1 rounded-md flex items-center gap-1" style={{ background: '#E0F7F2', color: '#1A8A73' }}>
-              <i className="ti ti-circle-check" style={{ fontSize: 12 }} />
-              Confirmed
-            </span>
-          )}
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-[9px] flex items-center justify-center"
+            style={{ background: '#F5F5F7', color: '#555566' }}
+            aria-label="Close"
+          >
+            <i className="ti ti-x" />
+          </button>
         </div>
 
-        <div className="space-y-3 mb-5">
-          <SheetRow icon="ti-clock"          label="Time"   value={fmtTimeRange(session.starts_at, session.ends_at)} />
-          <SheetRow icon="ti-calendar"        label="Date"   value={format(parseISO(session.starts_at), 'EEEE, MMMM d, yyyy')} />
-          <SheetRow icon="ti-currency-dollar" label="Rate"   value={fmtPrice(session.price)} />
-          <SheetRow
-            icon="ti-circle-check"
-            label="Status"
-            value={session.status === 'completed' ? 'Completed by family' : 'Scheduled'}
-            valueColor={session.status === 'completed' ? '#26B99A' : '#555566'}
-          />
-          {session.notes && <SheetRow icon="ti-notes" label="Notes" value={session.notes} />}
+        <div className="rounded-[12px] overflow-hidden mb-3" style={{ border: '0.5px solid #E8E8EC' }}>
+          {[
+            ['Date and time', `${format(start, 'EEE, MMM d')} · ${format(start, 'h:mm')}-${format(end, 'h:mm a')}`],
+            ['Rate', fmtPrice(session.price)],
+          ].map(([label, value], i) => (
+            <div
+              key={label}
+              className="flex items-center gap-3 px-3.5 py-3"
+              style={{ borderTop: i > 0 ? '0.5px solid #E8E8EC' : 'none' }}
+            >
+              <div className="text-[12px] flex-1" style={{ color: '#999AAA' }}>{label}</div>
+              <div className="text-[12px] font-medium text-right" style={{ color: '#1A1A2E' }}>{value}</div>
+            </div>
+          ))}
+          <div className="flex items-center gap-3 px-3.5 py-3" style={{ borderTop: '0.5px solid #E8E8EC' }}>
+            <div className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: completed ? '#E0F7F2' : '#F5F5F7' }}>
+              <i className="ti ti-circle-check" style={{ fontSize: 15, color: completed ? '#26B99A' : '#C8C8D0' }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-medium" style={{ color: completed ? '#1A8A73' : '#999AAA' }}>Student completed</div>
+              <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
+                {completed ? 'Included in payments' : 'Not completed yet'}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-3.5 py-3" style={{ borderTop: '0.5px solid #E8E8EC' }}>
+            <div className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: confirmed ? '#EEEBfd' : '#F5F5F7' }}>
+              <i className="ti ti-user-check" style={{ fontSize: 15, color: confirmed ? '#7C6EE6' : '#C8C8D0' }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-medium" style={{ color: confirmed ? '#7C6EE6' : '#999AAA' }}>Teacher confirmed</div>
+              <div className="text-[11px] mt-0.5" style={{ color: '#999AAA' }}>
+                {confirmed ? 'Confirmed by you' : 'Not confirmed yet'}
+              </div>
+            </div>
+          </div>
+          {session.notes && (
+            <div className="px-3.5 py-3" style={{ borderTop: '0.5px solid #E8E8EC' }}>
+              <div className="text-[12px] mb-1" style={{ color: '#999AAA' }}>Notes</div>
+              <div className="text-[12px] leading-relaxed" style={{ color: '#555566' }}>{session.notes}</div>
+            </div>
+          )}
         </div>
 
         {hasConflict && (
@@ -175,22 +201,22 @@ function DetailSheet({
         {!confirmed ? (
           <button
             onClick={() => { onConfirm(session.id); onClose() }}
-            className="w-full py-3 rounded-[12px] text-[14px] font-semibold flex items-center justify-center gap-2 mb-3"
+            className="w-full py-3 rounded-[12px] text-[13px] font-semibold mb-2 flex items-center justify-center gap-2"
             style={{ background: '#7C6EE6', color: '#fff' }}
           >
             <i className="ti ti-check" style={{ fontSize: 15 }} />
             Confirm this session
           </button>
-        ) : (
+        ) : confirmed ? (
           <button
             onClick={() => { onUnconfirm(session.id); onClose() }}
-            className="w-full py-3 rounded-[12px] text-[14px] font-semibold flex items-center justify-center gap-2 mb-3"
+            className="w-full py-3 rounded-[12px] text-[13px] font-semibold mb-2 flex items-center justify-center gap-2"
             style={{ background: '#fff', color: '#999AAA', border: '0.5px solid #E8E8EC' }}
           >
             <i className="ti ti-x" style={{ fontSize: 15 }} />
             Unconfirm
           </button>
-        )}
+        ) : null}
 
         <button
           onClick={onClose}
@@ -199,20 +225,6 @@ function DetailSheet({
         >
           Close
         </button>
-      </div>
-    </>
-  )
-}
-
-function SheetRow({ icon, label, value, valueColor = '#1A1A2E' }: { icon: string; label: string; value: string; valueColor?: string }) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: '#F5F5F7' }}>
-        <i className={`ti ${icon}`} style={{ fontSize: 15, color: '#7C6EE6' }} />
-      </div>
-      <div>
-        <div className="text-[11px] font-medium uppercase tracking-wide" style={{ color: '#999AAA' }}>{label}</div>
-        <div className="text-[14px] font-medium mt-0.5" style={{ color: valueColor }}>{value}</div>
       </div>
     </div>
   )
@@ -432,39 +444,39 @@ export function TeacherCalendarPage() {
   }
 
   // ── Confirm / unconfirm (optimistic) ─────────────────────────────────────────
-  async function handleConfirm(sessionId: string) {
-    const now   = new Date().toISOString()
+  function patchSessionConfirmation(sessionId: string, confirmedAt: string | null) {
     const patch = (arr: TeacherSessionRow[]) =>
-      arr.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: now } : s)
+      arr.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: confirmedAt } : s)
+
     setSessions(patch)
     setDispSessions(patch)
-    if (selected?.id === sessionId) setSelected(s => s ? { ...s, teacher_confirmed_at: now } : s)
+    setDispNextWeekSessions(patch)
+    pendingNextWeekSessions.current = patch(pendingNextWeekSessions.current)
+
+    if (selected?.id === sessionId) {
+      setSelected(s => s ? { ...s, teacher_confirmed_at: confirmedAt } : s)
+    }
+  }
+
+  async function handleConfirm(sessionId: string) {
+    const now = new Date().toISOString()
+    patchSessionConfirmation(sessionId, now)
     try {
       await confirmSession(sessionId)
     } catch (err) {
       console.error('confirm_session failed:', err)
-      const revert = (arr: TeacherSessionRow[]) =>
-        arr.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: null } : s)
-      setSessions(revert)
-      setDispSessions(revert)
+      patchSessionConfirmation(sessionId, null)
     }
   }
 
   async function handleUnconfirm(sessionId: string) {
-    const patch = (arr: TeacherSessionRow[]) =>
-      arr.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: null } : s)
-    setSessions(patch)
-    setDispSessions(patch)
-    if (selected?.id === sessionId) setSelected(s => s ? { ...s, teacher_confirmed_at: null } : s)
+    patchSessionConfirmation(sessionId, null)
     try {
       await unconfirmSession(sessionId)
     } catch (err) {
       console.error('unconfirm_session failed:', err)
-      const now    = new Date().toISOString()
-      const revert = (arr: TeacherSessionRow[]) =>
-        arr.map(s => s.id === sessionId ? { ...s, teacher_confirmed_at: now } : s)
-      setSessions(revert)
-      setDispSessions(revert)
+      const now = new Date().toISOString()
+      patchSessionConfirmation(sessionId, now)
     }
   }
 
@@ -680,7 +692,6 @@ export function TeacherCalendarPage() {
                           hasConflict={conflictIds.has(s.id)}
                           onSelect={setSelected}
                           onConfirm={handleConfirm}
-                          onUnconfirm={handleUnconfirm}
                         />
                       ))}
                     </div>
@@ -733,7 +744,6 @@ export function TeacherCalendarPage() {
                                 hasConflict={conflictIds.has(s.id)}
                                 onSelect={() => jumpToWeek(dispNextWeekStart!)}
                                 onConfirm={handleConfirm}
-                                onUnconfirm={handleUnconfirm}
                               />
                             </div>
                           ))}
