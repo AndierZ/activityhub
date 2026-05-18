@@ -811,6 +811,8 @@ export function CalendarPage() {
     }
     setTimeout(() => {
       isAnimating.current = false
+      const cached = sessionCache.get(target)
+      if (cached) { setSessions(cached.sessions); setConflictMap(cached.conflictMap) }
       setWeekStart(target)
       setSelectedDate(target)
     }, 300)
@@ -829,6 +831,8 @@ export function CalendarPage() {
     }
     setTimeout(() => {
       isAnimating.current = false
+      const cached = sessionCache.get(newStart)
+      if (cached) { setSessions(cached.sessions); setConflictMap(cached.conflictMap) }
       setWeekStart(newStart)
       setSelectedDate(newStart)
     }, 300)
@@ -957,7 +961,7 @@ export function CalendarPage() {
           onTouchEnd={onStripTouchEnd}
           onTouchCancel={onStripTouchCancel}
         >
-          <div ref={prevPanelRef} className="flex flex-shrink-0 px-3.5 pb-2 gap-0.5">
+          <div ref={prevPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {prevWeekDays.map(day => (
               <div key={day.toISOString()} className="flex-1 flex flex-col items-center py-1.5 rounded-xl" style={{ border: '0.5px solid transparent' }}>
                 <span className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: '#999AAA' }}>{format(day, 'EEE')}</span>
@@ -966,7 +970,7 @@ export function CalendarPage() {
               </div>
             ))}
           </div>
-          <div ref={currentPanelRef} className="flex flex-shrink-0 px-3.5 pb-2 gap-0.5">
+          <div ref={currentPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {weekDays.map(day => {
               const selected  = isSameDay(day, selectedDate)
               const today     = isToday(day)
@@ -994,7 +998,7 @@ export function CalendarPage() {
               )
             })}
           </div>
-          <div ref={nextPanelRef} className="flex flex-shrink-0 px-3.5 pb-2 gap-0.5">
+          <div ref={nextPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {nextWeekDays.map(day => {
               const dotColors = [...new Set(
                 nextWeekSessions

@@ -543,7 +543,7 @@ export function MySchedulePage() {
           onTouchEnd={onStripTouchEnd}
           onTouchCancel={onStripTouchCancel}
         >
-          <div ref={prevPanelRef} className="flex flex-shrink-0 px-4 pb-2 gap-1">
+          <div ref={prevPanelRef} className="flex flex-shrink-0 px-4 pt-1 pb-2 gap-1">
             {prevWeekDays.map(day => (
               <div
                 key={day.toISOString()}
@@ -556,7 +556,7 @@ export function MySchedulePage() {
               </div>
             ))}
           </div>
-          <div ref={currentPanelRef} className="flex flex-shrink-0 px-4 pb-2 gap-1">
+          <div ref={currentPanelRef} className="flex flex-shrink-0 px-4 pt-1 pb-2 gap-1">
             {weekDays.map(day => {
               const today     = isToday(day)
               const hasSess   = dayHasSessions(day)
@@ -576,7 +576,7 @@ export function MySchedulePage() {
               )
             })}
           </div>
-          <div ref={nextPanelRef} className="flex flex-shrink-0 px-4 pb-2 gap-1">
+          <div ref={nextPanelRef} className="flex flex-shrink-0 px-4 pt-1 pb-2 gap-1">
             {nextWeekDays.map(day => {
               const hasSess   = dispNextWeekSessions.some(s => isSameDay(parseISO(s.starts_at), day))
               const hasUnconf = dispNextWeekSessions.some(s => isSameDay(parseISO(s.starts_at), day) && !s.teacher_confirmed_at)
@@ -680,14 +680,15 @@ export function MySchedulePage() {
                       </div>
                       <div className="px-4 py-2">
                         {daySessions.map(s => (
-                          <SessionCard
-                            key={s.id}
-                            session={s}
-                            hasConflict={conflictIds.has(s.id)}
-                            onSelect={() => jumpToWeek(dispNextWeekStart!)}
-                            onConfirm={handleConfirm}
-                            onUnconfirm={handleUnconfirm}
-                          />
+                          <div key={s.id} style={{ opacity: 0.5 }}>
+                            <SessionCard
+                              session={s}
+                              hasConflict={conflictIds.has(s.id)}
+                              onSelect={() => jumpToWeek(dispNextWeekStart!)}
+                              onConfirm={handleConfirm}
+                              onUnconfirm={handleUnconfirm}
+                            />
+                          </div>
                         ))}
                       </div>
                     </div>
