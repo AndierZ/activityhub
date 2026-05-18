@@ -6,12 +6,14 @@ function IOSInstallBanner() {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    const ua = navigator.userAgent
+    const isIOS = /iphone|ipad|ipod/i.test(ua)
+    const isSafari = isIOS && !/CriOS|FxiOS|OPiOS/i.test(ua)
     const isStandalone =
       ('standalone' in navigator && (navigator as { standalone?: boolean }).standalone) ||
       window.matchMedia('(display-mode: standalone)').matches
     const dismissed = localStorage.getItem('ios_install_dismissed') === '1'
-    if (isIOS && !isStandalone && !dismissed) setVisible(true)
+    if (isSafari && !isStandalone && !dismissed) setVisible(true)
   }, [])
 
   if (!visible) return null
