@@ -45,7 +45,7 @@ Default role. Logs sessions, manages payments, invites a partner (shared househo
 
 ### Teacher
 A user who has claimed a teacher profile via an invite link. Sees a different app experience:
-- **Schedule** (`/my-schedule`): weekly view of all sessions logged under their profile by parents; can confirm/unconfirm sessions
+- **Schedule** (`/calendar`): weekly view of all sessions logged under their profile by parents; can confirm/unconfirm sessions
 - **Payments** (`/payments`): per-student balance summary and monthly statement drill-down (read-only)
 - **Profile** (`/profile`): edit their own teacher profile (name, subject, location, email, phone)
 
@@ -169,7 +169,7 @@ Returns `{ total_owed, total_paid, balance }`.
 Returns all child+teacher balance rows for a user in one query.
 
 **`get_monthly_statement(user_id, child_id, teacher_id, year, month)`**
-Returns interleaved sessions + payments for a month with running balance. Used by both parent `StatementPage` and teacher `TeacherStatementPage`.
+Returns interleaved sessions + payments for a month with running balance. Used by both student `StudentStatementPage` and teacher `TeacherStatementPage`.
 
 **`get_teacher_student_balances(teacher_id)`** `SECURITY DEFINER`
 Returns per-student balance rows for a claimed teacher. Same formula as `get_all_balances` but pivoted by `teacher_id`. Authorization guard: caller must have claimed this teacher profile.

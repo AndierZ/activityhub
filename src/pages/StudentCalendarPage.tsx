@@ -32,17 +32,17 @@ const CHILD_COLOR_BADGE: Record<string, string> = {
 // ─── Activity dot ─────────────────────────────────────────────────────────────
 
 function ActivityDot({ colors }: { colors: string[] }) {
-  if (colors.length === 0) return <div className="w-2 h-2" />
+  if (colors.length === 0) return <div className="w-1.5 h-1.5" />
 
   if (colors.length === 1) {
     return (
-      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colors[0] }} />
+      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: colors[0] }} />
     )
   }
 
   if (colors.length === 2) {
     return (
-      <div className="w-2 h-2 rounded-full overflow-hidden relative flex-shrink-0">
+      <div className="w-1.5 h-1.5 rounded-full overflow-hidden relative flex-shrink-0">
         <div className="absolute left-0 top-0 w-1/2 h-full" style={{ background: colors[0] }} />
         <div className="absolute right-0 top-0 w-1/2 h-full" style={{ background: colors[1] }} />
       </div>
@@ -54,7 +54,7 @@ function ActivityDot({ colors }: { colors: string[] }) {
     const stops = colors.map((c, i) => `${c} ${i * step}deg ${(i + 1) * step}deg`).join(', ')
     return (
       <div
-        className="w-2 h-2 rounded-full flex-shrink-0"
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
         style={{ background: `conic-gradient(${stops})` }}
       />
     )
@@ -63,7 +63,7 @@ function ActivityDot({ colors }: { colors: string[] }) {
   // 5+ children: rainbow easter egg
   return (
     <div
-      className="w-2 h-2 rounded-full flex-shrink-0"
+      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
       style={{ background: 'conic-gradient(#7C6EE6, #26B99A, #E86B5F, #E8A838, #7C6EE6)' }}
     />
   )
@@ -495,9 +495,9 @@ async function fetchAndCache(weekStart: Date, uid: string): Promise<WeekCacheEnt
   return entry
 }
 
-// ─── CalendarPage ─────────────────────────────────────────────────────────────
+// ─── StudentCalendarPage ──────────────────────────────────────────────────────
 
-export function CalendarPage() {
+export function StudentCalendarPage() {
   const { user, effectiveUserId } = useAuth()
   const uid = effectiveUserId ?? user?.id ?? ''
   const navigate = useNavigate()
@@ -1101,7 +1101,7 @@ export function CalendarPage() {
               )}
 
               {/* Coming up */}
-              {nextWeekSessions.length > 0 && nextWeekStart && (() => {
+              {nextWeekStart && (() => {
                 const nwEnd = endOfWeek(nextWeekStart, { weekStartsOn: 0 })
                 const dayGroups = eachDayOfInterval({ start: nextWeekStart, end: nwEnd })
                   .map(day => ({
@@ -1120,20 +1120,27 @@ export function CalendarPage() {
                       </span>
                       <div className="flex-1 h-px" style={{ background: '#E8E8EC' }} />
                     </div>
-                    {dayGroups.map(({ day, sessions: daySessions }) => (
-                      <div key={day.toISOString()}>
-                        <div className="px-5 py-2 flex items-center gap-2" style={{ borderBottom: '0.5px solid #E8E8EC', borderLeft: '3px solid transparent' }}>
-                          <span className="text-[12px] font-semibold" style={{ color: '#999AAA' }}>{format(day, 'EEE, MMM d')}</span>
-                        </div>
-                        <div className="px-5 py-2">
-                          {daySessions.map(s => (
-                            <div key={s.id} style={{ opacity: 0.5 }}>
-                              <SessionBlock session={s} allChildren={children} hasConflict={false} onSelect={() => jumpToWeek(nextWeekStart!)} />
-                            </div>
-                          ))}
-                        </div>
+                    {dayGroups.length === 0 ? (
+                      <div className="flex flex-col items-center pt-6 pb-4 text-center px-8">
+                        <i className="ti ti-calendar-off" style={{ fontSize: 32, color: '#D8D8DC' }} />
+                        <p className="text-[13px] mt-3" style={{ color: '#999AAA' }}>No sessions this week.</p>
                       </div>
-                    ))}
+                    ) : (
+                      dayGroups.map(({ day, sessions: daySessions }) => (
+                        <div key={day.toISOString()}>
+                          <div className="px-5 py-2 flex items-center gap-2" style={{ borderBottom: '0.5px solid #E8E8EC', borderLeft: '3px solid transparent' }}>
+                            <span className="text-[12px] font-semibold" style={{ color: '#999AAA' }}>{format(day, 'EEE, MMM d')}</span>
+                          </div>
+                          <div className="px-5 py-2">
+                            {daySessions.map(s => (
+                              <div key={s.id} style={{ opacity: 0.5 }}>
+                                <SessionBlock session={s} allChildren={children} hasConflict={false} onSelect={() => jumpToWeek(nextWeekStart!)} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </>
                 )
               })()}

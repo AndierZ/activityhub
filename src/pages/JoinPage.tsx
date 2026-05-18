@@ -72,7 +72,7 @@ export function JoinPage() {
     try {
       await acceptTeacherInvitation(token)
       await refreshTeacherClaim()
-      navigate('/my-schedule', { replace: true })
+      navigate('/calendar', { replace: true })
     } catch (err: unknown) {
       console.error('accept_teacher_invitation failed:', err)
       setAcceptError((err as { message?: string })?.message ?? 'Something went wrong')
@@ -175,7 +175,7 @@ export function JoinPage() {
           Use a different Google account to claim a second teacher profile.
         </div>
         <button
-          onClick={() => navigate('/my-schedule')}
+          onClick={() => navigate('/calendar')}
           className="py-2.5 px-5 rounded-[12px] text-[13px] font-semibold"
           style={{ background: '#7C6EE6', color: '#fff' }}
         >

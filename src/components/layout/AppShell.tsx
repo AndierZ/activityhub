@@ -53,7 +53,7 @@ interface NavItem {
 }
 
 const PARENT_NAV: NavItem[] = [
-  { path: '/',         label: 'Calendar', icon: 'ti-calendar'    },
+  { path: '/calendar', label: 'Calendar', icon: 'ti-calendar'    },
   { path: '/teachers', label: 'Teachers', icon: 'ti-users'       },
   { path: '/log',      label: 'Log',      icon: 'ti-plus'        },
   { path: '/payments', label: 'Payments', icon: 'ti-credit-card' },
@@ -61,7 +61,7 @@ const PARENT_NAV: NavItem[] = [
 ]
 
 const TEACHER_NAV: NavItem[] = [
-  { path: '/my-schedule', label: 'Calendar', icon: 'ti-calendar'    },
+  { path: '/calendar', label: 'Calendar', icon: 'ti-calendar'    },
   { path: '/payments',    label: 'Payments', icon: 'ti-credit-card' },
   { path: '/profile',     label: 'Profile',  icon: 'ti-user'        },
 ]

@@ -7,7 +7,6 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import {
   getTeacherWeekSessions,
-  getTeacherNextSessions,
   type TeacherSessionRow,
 } from '../lib/db/teachers'
 import { confirmSession, unconfirmSession } from '../lib/db/sessions'
@@ -219,9 +218,9 @@ function SheetRow({ icon, label, value, valueColor = '#1A1A2E' }: { icon: string
   )
 }
 
-// ─── MySchedulePage ───────────────────────────────────────────────────────────
+// ─── TeacherCalendarPage ──────────────────────────────────────────────────────
 
-export function MySchedulePage() {
+export function TeacherCalendarPage() {
   const { claimedTeacher } = useAuth()
 
   // ── Core state ──────────────────────────────────────────────────────────────
@@ -269,25 +268,16 @@ export function MySchedulePage() {
   useEffect(() => {
     if (!claimedTeacher) return
     setLoading(true)
+    const nextStart = addWeeks(weekStart, 1)
+    const nextEnd   = endOfWeek(nextStart, { weekStartsOn: 0 })
     Promise.all([
       getTeacherWeekSessions(claimedTeacher.id, weekStart, weekEnd),
-      getTeacherNextSessions(claimedTeacher.id, weekEnd, 50),
+      getTeacherWeekSessions(claimedTeacher.id, nextStart, nextEnd),
     ])
       .then(([data, upcoming]) => {
         setSessions(data)
-        if (upcoming.length > 0) {
-          const firstDate = parseISO(upcoming[0].starts_at)
-          const nwStart   = startOfWeek(firstDate, { weekStartsOn: 0 })
-          const nwEnd     = endOfWeek(firstDate,   { weekStartsOn: 0 })
-          pendingNextWeekStart.current    = nwStart
-          pendingNextWeekSessions.current = upcoming.filter(s => {
-            const d = parseISO(s.starts_at)
-            return d >= nwStart && d <= nwEnd
-          })
-        } else {
-          pendingNextWeekStart.current    = null
-          pendingNextWeekSessions.current = []
-        }
+        pendingNextWeekStart.current    = nextStart
+        pendingNextWeekSessions.current = upcoming
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -656,7 +646,7 @@ export function MySchedulePage() {
               )}
 
             {/* Coming up */}
-            {dispNextWeekSessions.length > 0 && dispNextWeekStart && (() => {
+            {dispNextWeekStart && (() => {
               const nwEnd = endOfWeek(dispNextWeekStart, { weekStartsOn: 0 })
               const dayGroups = eachDayOfInterval({ start: dispNextWeekStart, end: nwEnd })
                 .map(day => ({
@@ -676,31 +666,38 @@ export function MySchedulePage() {
                     </span>
                     <div className="flex-1 h-px" style={{ background: '#E8E8EC' }} />
                   </div>
-                  {dayGroups.map(({ day, sessions: daySessions }) => (
-                    <div key={day.toISOString()}>
-                      <div
-                        className="px-5 py-2 flex items-center gap-2"
-                        style={{ borderBottom: '0.5px solid #E8E8EC', borderLeft: '3px solid transparent' }}
-                      >
-                        <span className="text-[12px] font-semibold" style={{ color: '#999AAA' }}>
-                          {format(day, 'EEE, MMM d')}
-                        </span>
-                      </div>
-                      <div className="px-4 py-2">
-                        {daySessions.map(s => (
-                          <div key={s.id} style={{ opacity: 0.5 }}>
-                            <SessionCard
-                              session={s}
-                              hasConflict={conflictIds.has(s.id)}
-                              onSelect={() => jumpToWeek(dispNextWeekStart!)}
-                              onConfirm={handleConfirm}
-                              onUnconfirm={handleUnconfirm}
-                            />
-                          </div>
-                        ))}
-                      </div>
+                  {dayGroups.length === 0 ? (
+                    <div className="flex flex-col items-center pt-6 pb-4 text-center px-8">
+                      <i className="ti ti-calendar-off" style={{ fontSize: 32, color: '#D8D8DC' }} />
+                      <p className="text-[13px] mt-3" style={{ color: '#999AAA' }}>No sessions this week.</p>
                     </div>
-                  ))}
+                  ) : (
+                    dayGroups.map(({ day, sessions: daySessions }) => (
+                      <div key={day.toISOString()}>
+                        <div
+                          className="px-5 py-2 flex items-center gap-2"
+                          style={{ borderBottom: '0.5px solid #E8E8EC', borderLeft: '3px solid transparent' }}
+                        >
+                          <span className="text-[12px] font-semibold" style={{ color: '#999AAA' }}>
+                            {format(day, 'EEE, MMM d')}
+                          </span>
+                        </div>
+                        <div className="px-4 py-2">
+                          {daySessions.map(s => (
+                            <div key={s.id} style={{ opacity: 0.5 }}>
+                              <SessionCard
+                                session={s}
+                                hasConflict={conflictIds.has(s.id)}
+                                onSelect={() => jumpToWeek(dispNextWeekStart!)}
+                                onConfirm={handleConfirm}
+                                onUnconfirm={handleUnconfirm}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               )
             })()}

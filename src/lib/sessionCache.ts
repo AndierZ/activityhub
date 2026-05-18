@@ -32,7 +32,7 @@ function evict() {
   }
 }
 
-// ─── Pub/sub: CalendarPage subscribes so external invalidations (e.g. LogPage
+// ─── Pub/sub: StudentCalendarPage subscribes so external invalidations (e.g. LogPage
 //     saving a session) can trigger a reload without a full page refresh. ─────
 
 type Listener = (weekStart: Date) => void
@@ -72,7 +72,7 @@ export function clear(): void {
 }
 
 /** Called from other pages after creating/modifying a session. Invalidates the
- *  cache for that week and notifies any mounted CalendarPage to reload. */
+ *  cache for that week and notifies any mounted StudentCalendarPage to reload. */
 export function invalidateWeekOf(date: Date): void {
   const ws = startOfWeek(date, { weekStartsOn: 0 })
   invalidate(ws)

@@ -195,9 +195,9 @@ export function LogPaymentForm({
   )
 }
 
-// ─── PaymentsPage ─────────────────────────────────────────────────────────────
+// ─── StudentPaymentsPage ──────────────────────────────────────────────────────
 
-export function PaymentsPage() {
+export function StudentPaymentsPage() {
   const { user, effectiveUserId } = useAuth()
   const uid = effectiveUserId ?? user?.id ?? ''
   const navigate  = useNavigate()

@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { getMonthlyStatement, updatePayment, deletePayment } from '../lib/db/payments'
 import { getSavedTeachers } from '../lib/db/teachers'
 import { getChildren } from '../lib/db/children'
-import { LogPaymentForm } from './PaymentsPage'
+import { LogPaymentForm } from './StudentPaymentsPage'
 import {
   getChildColor, CHILD_COLOR_HEX, CHILD_COLOR_BG, getInitials,
 } from '../types'
@@ -23,9 +23,9 @@ function balanceLabel(n: number): { text: string; color: string } {
   return                         { text: 'In credit', color: '#26B99A' }
 }
 
-// ─── StatementPage ────────────────────────────────────────────────────────────
+// ─── StudentStatementPage ─────────────────────────────────────────────────────
 
-export function StatementPage() {
+export function StudentStatementPage() {
   const { childId, teacherId } = useParams<{ childId: string; teacherId: string }>()
   const { user, effectiveUserId } = useAuth()
   const uid = effectiveUserId ?? user?.id ?? ''

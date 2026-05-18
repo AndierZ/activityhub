@@ -42,8 +42,8 @@ src/
   hooks/useAuth.tsx
   components/layout/AppShell.tsx
   pages/
-    LoginPage.tsx, CalendarPage.tsx, TeachersPage.tsx,
-    LogPage.tsx, PaymentsPage.tsx, ProfilePage.tsx
+    LoginPage.tsx, StudentCalendarPage.tsx, TeachersPage.tsx,
+    LogPage.tsx, StudentPaymentsPage.tsx, ProfilePage.tsx
 supabase/migrations/
   001_enable_extensions.sql  002_users.sql  003_children.sql
   004_teachers.sql  005_user_teachers.sql  006_recurrence_templates.sql
@@ -73,7 +73,7 @@ Auth flow: `signInWithGoogle()` → Google consent → redirect back → `onAuth
 
 ## ✅ Phase 3 — Calendar & Sessions (Done)
 
-**CalendarPage (`/`)** ✅ Built
+**StudentCalendarPage (`/calendar`)** ✅ Built
 - Week title header with prev/next week navigation
 - Child filter tabs (Everyone + one per child, dynamic from DB)
 - Week strip — 7 day pills with segmented activity dots
@@ -160,7 +160,7 @@ Step 3: Confirm
 
 ## ✅ Phase 5 — Payments & Statements
 
-**PaymentsPage (`/payments`)**
+**StudentPaymentsPage (`/payments`)**
 - Balance hero card:
   - Left: "Balance" — large number, colour-coded (amber = owe, green = credit, grey = settled)
   - Right: "Paid this month" — muted reference number
@@ -256,7 +256,7 @@ Teachers can claim their profile and get a read-only view of their own schedule.
 - `AppShell` shows teacher nav: Schedule / Payments / Profile
 - Parent-only sections (My children, Shared access) hidden from teacher Profile
 
-### Teacher schedule (`/my-schedule`)
+### Teacher schedule (`/calendar`)
 
 - Weekly calendar strip: Mon–Sun pills, week navigation, today highlight
 - Dot indicators: purple = unconfirmed sessions, teal = all confirmed
@@ -270,7 +270,7 @@ Teachers can claim their profile and get a read-only view of their own schedule.
 - `confirm_session(p_session_id)` SECURITY DEFINER RPC — idempotent, only writes `teacher_confirmed_at`
 - `unconfirm_session(p_session_id)` SECURITY DEFINER RPC — sets back to null
 - Parents remain source of truth for session logging and completion; teacher confirmation is additive only
-- CalendarPage shows "Teacher confirmed" teal badge when `teacher_confirmed_at` is set
+- StudentCalendarPage shows "Teacher confirmed" teal badge when `teacher_confirmed_at` is set
 
 ### Teacher payments (`/payments` for teacher accounts)
 
