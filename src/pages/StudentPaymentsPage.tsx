@@ -252,6 +252,14 @@ export function StudentPaymentsPage() {
 
   const monthTotal = realizedThisMonth + scheduledThisMonth
   const monthPct   = monthTotal > 0 ? (realizedThisMonth / monthTotal) * 100 : 0
+  const owedRows = balances.filter(b => b.balance > 0.01)
+  const owedTeacherCount = new Set(owedRows.map(b => b.teacher.id)).size
+  const firstOwedRow = owedRows[0]
+
+  function jumpToFirstOwedTeacher() {
+    if (!firstOwedRow) return
+    navigate(`/payments/${firstOwedRow.child.id}/${firstOwedRow.teacher.id}`)
+  }
 
   const balancePairKeys = new Set(balances.map(b => `${b.child.id}:${b.teacher.id}`))
   const upcomingOnlyRows = Object.entries(monthByPair)
@@ -271,8 +279,23 @@ export function StudentPaymentsPage() {
 
       {/* Header */}
       <div className="px-5 pt-4 pb-3 flex-shrink-0" style={{ borderBottom: '0.5px solid #E8E8EC' }}>
-        <div className="font-serif text-[22px] leading-tight" style={{ color: '#1A1A2E' }}>
-          Payments
+        <div className="flex items-center justify-between gap-3">
+          <div className="font-serif text-[22px] leading-tight" style={{ color: '#1A1A2E' }}>
+            Payments
+          </div>
+          {!loading && (
+            <button
+              onClick={jumpToFirstOwedTeacher}
+              disabled={!firstOwedRow}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold disabled:cursor-default"
+              style={firstOwedRow
+                ? { background: '#FEF8EC', color: '#C0830A' }
+                : { background: '#E0F7F2', color: '#1A8A73' }}
+            >
+              <i className={`ti ${firstOwedRow ? 'ti-wallet' : 'ti-circle-check'}`} style={{ fontSize: 13 }} />
+              {firstOwedRow ? `${owedTeacherCount} to pay` : 'All settled'}
+            </button>
+          )}
         </div>
       </div>
 
