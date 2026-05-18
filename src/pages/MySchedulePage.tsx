@@ -231,22 +231,25 @@ export function MySchedulePage() {
   const [selected,  setSelected]  = useState<TeacherSessionRow | null>(null)
 
   // ── Display state (lags behind fetch so feed stays visible during load) ─────
-  const [dispWeekStart,       setDispWeekStart]       = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
-  const [dispSessions,        setDispSessions]        = useState<TeacherSessionRow[]>([])
+  const [dispWeekStart,        setDispWeekStart]        = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
+  const [dispSessions,         setDispSessions]         = useState<TeacherSessionRow[]>([])
   const [dispNextWeekSessions, setDispNextWeekSessions] = useState<TeacherSessionRow[]>([])
-  const [dispNextWeekStart,   setDispNextWeekStart]   = useState<Date | null>(null)
-  const [feedKey,       setFeedKey]       = useState(0)
-  const [feedAnimStyle, setFeedAnimStyle] = useState('none')
+  const [dispNextWeekStart,    setDispNextWeekStart]    = useState<Date | null>(null)
+  const [feedKey,      setFeedKey]      = useState(0)
+  const [stripHeight,  setStripHeight]  = useState<number | undefined>(undefined)
 
   // ── Refs ────────────────────────────────────────────────────────────────────
-  const stripRef                = useRef<HTMLDivElement>(null)
-  const touchStartX             = useRef<number | null>(null)
-  const didSwipe                = useRef(false)
-  const isAnimating             = useRef(false)
-  const feedSlideDir            = useRef<'prev' | 'next' | null>(null)
+  const stripRef        = useRef<HTMLDivElement>(null)
+  const prevPanelRef    = useRef<HTMLDivElement>(null)
+  const currentPanelRef = useRef<HTMLDivElement>(null)
+  const nextPanelRef    = useRef<HTMLDivElement>(null)
+  const touchStartY     = useRef<number | null>(null)
+  const didSwipe        = useRef(false)
+  const isAnimating     = useRef(false)
+  const feedWrapperRef  = useRef<HTMLDivElement>(null)
+  const feedAnimDir     = useRef<'prev' | 'next' | null>(null)
   const pendingNextWeekSessions = useRef<TeacherSessionRow[]>([])
   const pendingNextWeekStart    = useRef<Date | null>(null)
-  const initialLoadDone         = useRef(false)
 
   // ── Derived ─────────────────────────────────────────────────────────────────
   const weekEnd      = endOfWeek(weekStart, { weekStartsOn: 0 })
@@ -291,93 +294,142 @@ export function MySchedulePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claimedTeacher?.id, weekStart])
 
-  // ── Carousel reset ───────────────────────────────────────────────────────────
+  // ── Strip snap + panel opacity reset on week change ──────────────────────────
   useLayoutEffect(() => {
     const strip = stripRef.current
-    if (!strip) return
-    strip.style.transition = 'none'
-    strip.style.transform  = 'translateX(-33.333%)'
+    if (strip) { strip.style.transition = 'none'; strip.style.transform = 'translateY(-33.333%)' }
+    for (const [ref, opacity] of [
+      [prevPanelRef, '0.5'],
+      [currentPanelRef, '1'],
+      [nextPanelRef, '0.5'],
+    ] as const) {
+      const el = ref.current
+      if (el) { el.style.transition = 'none'; el.style.opacity = opacity }
+    }
   }, [weekStart])
+
+  // ── Measure strip panel height once on mount ──────────────────────────────────
+  useLayoutEffect(() => {
+    const panel = currentPanelRef.current
+    if (panel) setStripHeight(panel.offsetHeight)
+  }, [])
+
+  // ── Snap feed wrapper before new display state paints ────────────────────────
+  useLayoutEffect(() => {
+    if (feedKey === 0) return
+    const wrapper = feedWrapperRef.current
+    if (!wrapper || !feedAnimDir.current) return
+    const dir = feedAnimDir.current
+    wrapper.style.transition = 'none'
+    wrapper.style.transform  = `translateY(${dir === 'next' ? '20px' : '-20px'})`
+    wrapper.style.opacity    = '0'
+  }, [feedKey])
+
+  // ── Feed enter animation when display state commits ───────────────────────────
+  useEffect(() => {
+    if (feedKey === 0) return
+    const wrapper = feedWrapperRef.current
+    if (!wrapper || !feedAnimDir.current) return
+    const rAF = requestAnimationFrame(() => {
+      wrapper.style.transition = 'transform 350ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 350ms ease-out'
+      wrapper.style.transform  = 'translateY(0)'
+      wrapper.style.opacity    = '1'
+      feedAnimDir.current = null
+    })
+    return () => cancelAnimationFrame(rAF)
+  }, [feedKey])
 
   // ── Commit display state when data arrives ───────────────────────────────────
   useEffect(() => {
     if (loading) return
-    const isFirst = !initialLoadDone.current
-    initialLoadDone.current = true
-    const dir = feedSlideDir.current
-    feedSlideDir.current = null
     setDispWeekStart(weekStart)
     setDispSessions(sessions)
     setDispNextWeekSessions(pendingNextWeekSessions.current)
     setDispNextWeekStart(pendingNextWeekStart.current)
-    setFeedAnimStyle(
-      isFirst        ? 'feedFadeIn 220ms ease-out' :
-      dir === 'next' ? 'feedSlideNext 320ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' :
-      dir === 'prev' ? 'feedSlidePrev 320ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' :
-                       'feedFadeIn 220ms ease-out'
-    )
     setFeedKey(k => k + 1)
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Week navigation ──────────────────────────────────────────────────────────
+  // ── Navigation ────────────────────────────────────────────────────────────────
+  function animateFeed(dir: 'prev' | 'next') {
+    feedAnimDir.current = dir
+    const wrapper = feedWrapperRef.current
+    if (!wrapper) return
+    wrapper.style.transition = 'transform 200ms ease-in, opacity 200ms ease-in'
+    wrapper.style.transform  = `translateY(${dir === 'next' ? '-20px' : '20px'})`
+    wrapper.style.opacity    = '0'
+  }
+
+  function animatePanels(dir: 'prev' | 'next') {
+    const easing = 'opacity 300ms ease'
+    const curr = currentPanelRef.current
+    const prev = prevPanelRef.current
+    const next = nextPanelRef.current
+    if (curr) { curr.style.transition = easing; curr.style.opacity = '0.5' }
+    if (dir === 'next' && next) { next.style.transition = easing; next.style.opacity = '1' }
+    if (dir === 'prev' && prev) { prev.style.transition = easing; prev.style.opacity = '1' }
+  }
+
   function jumpToWeek(target: Date) {
     if (isAnimating.current) return
-    feedSlideDir.current = 'next'
-    setWeekStart(target)
+    isAnimating.current = true
+    const dir: 'prev' | 'next' = target > weekStart ? 'next' : 'prev'
+    animateFeed(dir)
+    animatePanels(dir)
+    const strip = stripRef.current
+    if (strip) {
+      strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+      strip.style.transform  = dir === 'prev' ? 'translateY(0%)' : 'translateY(-66.666%)'
+    }
+    setTimeout(() => { isAnimating.current = false; setWeekStart(target) }, 300)
   }
 
   function navigateWeek(dir: 'prev' | 'next') {
     if (isAnimating.current) return
-    isAnimating.current  = true
-    feedSlideDir.current = dir
+    isAnimating.current = true
     const newStart = dir === 'prev' ? subWeeks(weekStart, 1) : addWeeks(weekStart, 1)
+    animateFeed(dir)
+    animatePanels(dir)
     const strip = stripRef.current
     if (strip) {
       strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-      strip.style.transform  = dir === 'prev' ? 'translateX(0%)' : 'translateX(-66.666%)'
+      strip.style.transform  = dir === 'prev' ? 'translateY(0%)' : 'translateY(-66.666%)'
     }
-    setTimeout(() => {
-      isAnimating.current = false
-      setWeekStart(newStart)
-    }, 300)
+    setTimeout(() => { isAnimating.current = false; setWeekStart(newStart) }, 300)
   }
 
-  // ── Touch handlers ───────────────────────────────────────────────────────────
+  // ── Touch handlers (vertical: swipe up = next, swipe down = prev) ────────────
   function onStripTouchStart(e: React.TouchEvent) {
     if (isAnimating.current) return
-    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
     didSwipe.current    = false
   }
   function onStripTouchMove(e: React.TouchEvent) {
-    if (touchStartX.current === null || isAnimating.current) return
-    const delta = e.touches[0].clientX - touchStartX.current
+    if (touchStartY.current === null || isAnimating.current) return
+    const delta = e.touches[0].clientY - touchStartY.current
     const strip = stripRef.current
     if (!strip) return
     strip.style.transition = 'none'
-    strip.style.transform  = `translateX(calc(-33.333% + ${delta}px))`
+    strip.style.transform  = `translateY(calc(-33.333% + ${delta}px))`
   }
   function onStripTouchEnd(e: React.TouchEvent) {
-    if (touchStartX.current === null) return
-    const delta = e.changedTouches[0].clientX - touchStartX.current
-    touchStartX.current = null
-    if (Math.abs(delta) > 50) {
+    if (touchStartY.current === null) return
+    const delta = e.changedTouches[0].clientY - touchStartY.current
+    touchStartY.current = null
+    if (Math.abs(delta) > 50 && !isAnimating.current) {
       didSwipe.current = true
       navigateWeek(delta > 0 ? 'prev' : 'next')
     } else {
       if (Math.abs(delta) > 10) didSwipe.current = true
       const strip = stripRef.current
-      if (strip) {
-        strip.style.transition = 'transform 180ms ease-out'
-        strip.style.transform  = 'translateX(-33.333%)'
-      }
+      if (strip) { strip.style.transition = 'transform 180ms ease-out'; strip.style.transform = 'translateY(-33.333%)' }
     }
   }
   function onStripTouchCancel() {
-    touchStartX.current = null
+    touchStartY.current = null
     const strip = stripRef.current
     if (!strip) return
     strip.style.transition = 'transform 180ms ease-out'
-    strip.style.transform  = 'translateX(-33.333%)'
+    strip.style.transform  = 'translateY(-33.333%)'
   }
 
   // ── Confirm / unconfirm (optimistic) ─────────────────────────────────────────
@@ -440,13 +492,6 @@ export function MySchedulePage() {
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <style>{`
-        @keyframes feedFadeIn    { from { opacity: 0 }                               to { opacity: 1 } }
-        @keyframes feedSlideNext { from { opacity: 0.7; transform: translateY(28px) } to { opacity: 1; transform: none } }
-        @keyframes feedSlidePrev { from { opacity: 0.7; transform: translateY(-28px) } to { opacity: 1; transform: none } }
-        @keyframes comingUpFade  { from { opacity: 0 }                               to { opacity: 1 } }
-      `}</style>
-
       {/* Header */}
       <div className="flex-shrink-0 px-5 pt-4 pb-2" style={{ borderBottom: '0.5px solid #E8E8EC' }}>
         <div className="flex items-center justify-between">
@@ -487,46 +532,69 @@ export function MySchedulePage() {
         </button>
       </div>
 
-      {/* Week strip — 3-panel carousel */}
-      <div className="flex-shrink-0 overflow-hidden" style={{ borderBottom: '0.5px solid #E8E8EC' }}>
+      {/* Week strip — 3-panel vertical carousel */}
+      <div className="flex-shrink-0 overflow-hidden" style={{ borderBottom: '0.5px solid #E8E8EC', height: stripHeight }}>
         <div
           ref={stripRef}
-          className="flex"
-          style={{ width: '300%', willChange: 'transform' }}
+          className="flex flex-col"
+          style={{ willChange: 'transform' }}
           onTouchStart={onStripTouchStart}
           onTouchMove={onStripTouchMove}
           onTouchEnd={onStripTouchEnd}
           onTouchCancel={onStripTouchCancel}
         >
-          {([prevWeekDays, weekDays, nextWeekDays] as const).map((days, panelIdx) => (
-            <div key={panelIdx} className="flex px-4 pb-2 gap-1" style={{ width: '33.333%' }}>
-              {days.map(day => {
-                const isCurrentPanel = panelIdx === 1
-                const today          = isToday(day)
-                const hasSess        = isCurrentPanel && dayHasSessions(day)
-                const hasUnconf      = isCurrentPanel && dayHasUnconfirmed(day)
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className="flex-1 flex flex-col items-center py-1.5 rounded-[10px]"
-                    style={{ border: (today && isCurrentPanel) ? '1.5px solid #7C6EE6' : '1.5px solid transparent' }}
-                  >
-                    <span className="text-[10px] font-medium" style={{ color: (today && isCurrentPanel) ? '#7C6EE6' : '#999AAA' }}>
-                      {format(day, 'EEE')[0]}
-                    </span>
-                    <span className="text-[13px] font-semibold mt-0.5" style={{ color: (today && isCurrentPanel) ? '#7C6EE6' : '#555566' }}>
-                      {format(day, 'd')}
-                    </span>
-                    <div className="h-2 mt-0.5 flex items-center justify-center">
-                      {hasSess && (
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: hasUnconf ? '#7C6EE6' : '#26B99A' }} />
-                      )}
-                    </div>
+          <div ref={prevPanelRef} className="flex flex-shrink-0 px-4 pb-2 gap-1">
+            {prevWeekDays.map(day => (
+              <div
+                key={day.toISOString()}
+                className="flex-1 flex flex-col items-center py-1.5 rounded-[10px]"
+                style={{ border: '1.5px solid transparent' }}
+              >
+                <span className="text-[10px] font-medium" style={{ color: '#999AAA' }}>{format(day, 'EEE')[0]}</span>
+                <span className="text-[13px] font-semibold mt-0.5" style={{ color: '#555566' }}>{format(day, 'd')}</span>
+                <div className="h-2 mt-0.5" />
+              </div>
+            ))}
+          </div>
+          <div ref={currentPanelRef} className="flex flex-shrink-0 px-4 pb-2 gap-1">
+            {weekDays.map(day => {
+              const today     = isToday(day)
+              const hasSess   = dayHasSessions(day)
+              const hasUnconf = dayHasUnconfirmed(day)
+              return (
+                <div
+                  key={day.toISOString()}
+                  className="flex-1 flex flex-col items-center py-1.5 rounded-[10px]"
+                  style={{ border: today ? '1.5px solid #7C6EE6' : '1.5px solid transparent' }}
+                >
+                  <span className="text-[10px] font-medium" style={{ color: today ? '#7C6EE6' : '#999AAA' }}>{format(day, 'EEE')[0]}</span>
+                  <span className="text-[13px] font-semibold mt-0.5" style={{ color: today ? '#7C6EE6' : '#555566' }}>{format(day, 'd')}</span>
+                  <div className="h-2 mt-0.5 flex items-center justify-center">
+                    {hasSess && <div className="w-1.5 h-1.5 rounded-full" style={{ background: hasUnconf ? '#7C6EE6' : '#26B99A' }} />}
                   </div>
-                )
-              })}
-            </div>
-          ))}
+                </div>
+              )
+            })}
+          </div>
+          <div ref={nextPanelRef} className="flex flex-shrink-0 px-4 pb-2 gap-1">
+            {nextWeekDays.map(day => {
+              const hasSess   = dispNextWeekSessions.some(s => isSameDay(parseISO(s.starts_at), day))
+              const hasUnconf = dispNextWeekSessions.some(s => isSameDay(parseISO(s.starts_at), day) && !s.teacher_confirmed_at)
+              return (
+                <div
+                  key={day.toISOString()}
+                  className="flex-1 flex flex-col items-center py-1.5 rounded-[10px]"
+                  style={{ border: '1.5px solid transparent' }}
+                >
+                  <span className="text-[10px] font-medium" style={{ color: '#999AAA' }}>{format(day, 'EEE')[0]}</span>
+                  <span className="text-[13px] font-semibold mt-0.5" style={{ color: '#555566' }}>{format(day, 'd')}</span>
+                  <div className="h-2 mt-0.5 flex items-center justify-center">
+                    {hasSess && <div className="w-1.5 h-1.5 rounded-full" style={{ background: hasUnconf ? '#7C6EE6' : '#26B99A' }} />}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
 
@@ -537,10 +605,8 @@ export function MySchedulePage() {
             <div className="w-7 h-7 border-2 rounded-full animate-spin" style={{ borderColor: '#EEEBfd', borderTopColor: '#7C6EE6' }} />
           </div>
         ) : (
-          <>
-            {/* Current week — directional slide */}
-            <div key={feedKey} style={{ animation: feedAnimStyle }}>
-              {dispWeekGroups.length === 0 ? (
+          <div ref={feedWrapperRef}>
+            {dispWeekGroups.length === 0 ? (
                 <div className="flex flex-col items-center pt-12 text-center px-8">
                   <i className="ti ti-calendar-off" style={{ fontSize: 32, color: '#D8D8DC' }} />
                   <p className="text-[13px] mt-3" style={{ color: '#999AAA' }}>No sessions this week.</p>
@@ -580,9 +646,8 @@ export function MySchedulePage() {
                   </div>
                 ))
               )}
-            </div>
 
-            {/* Coming up — independently keyed, gentle fade */}
+            {/* Coming up */}
             {dispNextWeekSessions.length > 0 && dispNextWeekStart && (() => {
               const nwEnd = endOfWeek(dispNextWeekStart, { weekStartsOn: 0 })
               const dayGroups = eachDayOfInterval({ start: dispNextWeekStart, end: nwEnd })
@@ -595,7 +660,7 @@ export function MySchedulePage() {
                 .filter(g => g.sessions.length > 0)
 
               return (
-                <div key={dispNextWeekStart.toISOString()} style={{ animation: 'comingUpFade 280ms ease-out' }}>
+                <div>
                   <div className="flex items-center gap-3 px-5 mt-4 mb-1">
                     <div className="flex-1 h-px" style={{ background: '#E8E8EC' }} />
                     <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#C8C8D0' }}>
@@ -630,7 +695,7 @@ export function MySchedulePage() {
                 </div>
               )
             })()}
-          </>
+          </div>
         )}
       </div>
 
