@@ -380,7 +380,11 @@ export function MySchedulePage() {
       strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
       strip.style.transform  = dir === 'prev' ? 'translateY(0%)' : 'translateY(-66.666%)'
     }
-    setTimeout(() => { isAnimating.current = false; setWeekStart(target) }, 300)
+    setTimeout(() => {
+      isAnimating.current = false
+      if (dir === 'next') setSessions(pendingNextWeekSessions.current)
+      setWeekStart(target)
+    }, 300)
   }
 
   function navigateWeek(dir: 'prev' | 'next') {
@@ -394,7 +398,11 @@ export function MySchedulePage() {
       strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
       strip.style.transform  = dir === 'prev' ? 'translateY(0%)' : 'translateY(-66.666%)'
     }
-    setTimeout(() => { isAnimating.current = false; setWeekStart(newStart) }, 300)
+    setTimeout(() => {
+      isAnimating.current = false
+      if (dir === 'next') setSessions(pendingNextWeekSessions.current)
+      setWeekStart(newStart)
+    }, 300)
   }
 
   // ── Touch handlers (vertical: swipe up = next, swipe down = prev) ────────────
