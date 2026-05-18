@@ -40,7 +40,18 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: 'index.html',
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
+          {
+            // Always fetch fresh HTML so new deployments are picked up immediately.
+            // Falls back to cache only when offline.
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-cache',
+              networkTimeoutSeconds: 3,
+            },
+          },
           {
             // Cache the Tabler icons font from CDN
             urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*/i,
