@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   startOfWeek, endOfWeek, eachDayOfInterval,
@@ -9,7 +9,6 @@ import { useAuth } from '../hooks/useAuth'
 import { getChildren } from '../lib/db/children'
 import {
   getSessionsForWeek,
-  getNextSessions,
   checkConflict,
   completeSession,
   uncompleteSession,
@@ -17,6 +16,8 @@ import {
   deleteSessionsInSeriesFrom,
   updateSession,
 } from '../lib/db/sessions'
+import * as sessionCache from '../lib/sessionCache'
+import type { WeekCacheEntry } from '../lib/sessionCache'
 import type { Child, Session } from '../types'
 import { getChildColor, CHILD_COLOR_HEX, CHILD_COLOR_BG } from '../types'
 
@@ -473,6 +474,27 @@ function SessionActionSheet({
   )
 }
 
+// ─── Cache fetch ──────────────────────────────────────────────────────────────
+
+async function fetchAndCache(weekStart: Date, uid: string): Promise<WeekCacheEntry> {
+  const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 })
+  const data    = await getSessionsForWeek(uid, weekStart, weekEnd)
+
+  const results = await Promise.all(
+    data.map(s =>
+      s.status === 'scheduled' && s.teacher_id
+        ? checkConflict(s.teacher_id, s.starts_at, s.ends_at, uid)
+        : Promise.resolve({ has_conflict: false, conflicting_sessions_count: 0 })
+    )
+  )
+  const conflictMap = new Map<string, boolean>()
+  data.forEach((s, i) => conflictMap.set(s.id, results[i].has_conflict))
+
+  const entry: WeekCacheEntry = { sessions: data, conflictMap, fetchedAt: new Date() }
+  sessionCache.set(weekStart, entry)
+  return entry
+}
+
 // ─── CalendarPage ─────────────────────────────────────────────────────────────
 
 export function CalendarPage() {
@@ -490,13 +512,19 @@ export function CalendarPage() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null)
   const [nextWeekSessions, setNextWeekSessions] = useState<Session[]>([])
   const [nextWeekStart, setNextWeekStart]       = useState<Date | null>(null)
+  const [refreshCounter, setRefreshCounter]     = useState(0)
 
-  const scrollRef   = useRef<HTMLDivElement>(null)
-  const dayRefs     = useRef<Map<string, HTMLDivElement>>(new Map())
-  const stripRef    = useRef<HTMLDivElement>(null)
-  const touchStartX = useRef<number | null>(null)
-  const didSwipe    = useRef(false)
-  const isAnimating = useRef(false)
+  const scrollRef      = useRef<HTMLDivElement>(null)
+  const dayRefs        = useRef<Map<string, HTMLDivElement>>(new Map())
+  const stripRef       = useRef<HTMLDivElement>(null)
+  const touchStartX    = useRef<number | null>(null)
+  const didSwipe       = useRef(false)
+  const isAnimating    = useRef(false)
+  const weekStartRef   = useRef(weekStart)
+  const prefetchingRef = useRef(new Set<string>())
+  const pullStartY     = useRef<number | null>(null)
+  const [pullDist, setPullDist] = useState(0)
+  const PULL_THRESHOLD = 60
 
   const weekEnd      = endOfWeek(weekStart, { weekStartsOn: 0 })
   const prevWeekDays = eachDayOfInterval({ start: subWeeks(weekStart, 1), end: endOfWeek(subWeeks(weekStart, 1), { weekStartsOn: 0 }) })
@@ -517,49 +545,139 @@ export function CalendarPage() {
     getChildren(uid).then(setChildren).catch(console.error)
   }, [user])
 
-  // ── Load sessions when week or child filter changes ───────────────────────
-  const loadSessions = useCallback(async () => {
-    if (!user) { setLoading(false); return }
-    const end = endOfWeek(weekStart, { weekStartsOn: 0 })
-    setLoading(true)
-    try {
-      const [data, upcoming] = await Promise.all([
-        getSessionsForWeek(uid, weekStart, end, selectedChildId ?? undefined),
-        getNextSessions(uid, end, 50),
-      ])
-      setSessions(data)
+  // ── Keep weekStartRef in sync for use inside async callbacks ─────────────
+  useEffect(() => { weekStartRef.current = weekStart }, [weekStart])
 
-      const results = await Promise.all(
-        data.map(s => s.status === 'scheduled' && s.teacher_id
-          ? checkConflict(s.teacher_id, s.starts_at, s.ends_at, uid)
-          : Promise.resolve({ has_conflict: false, conflicting_sessions_count: 0 })
-        )
-      )
-      const map = new Map<string, boolean>()
-      data.forEach((s, i) => map.set(s.id, results[i].has_conflict))
-      setConflictMap(map)
-
-      if (upcoming.length > 0) {
-        const firstDate = parseISO(upcoming[0].starts_at)
-        const nwStart   = startOfWeek(firstDate, { weekStartsOn: 0 })
-        const nwEnd     = endOfWeek(firstDate, { weekStartsOn: 0 })
-        setNextWeekStart(nwStart)
-        setNextWeekSessions(upcoming.filter(s => {
-          const d = parseISO(s.starts_at)
-          return d >= nwStart && d <= nwEnd
-        }))
-      } else {
-        setNextWeekStart(null)
-        setNextWeekSessions([])
+  // ── Re-load when an external mutation (e.g. LogPage save) invalidates our week
+  useEffect(() => {
+    return sessionCache.subscribe(dirtyWeek => {
+      if (dirtyWeek.toISOString() === weekStartRef.current.toISOString()) {
+        setRefreshCounter(c => c + 1)
       }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }, [user, weekStart, selectedChildId])
+    })
+  }, [])
 
-  useEffect(() => { loadSessions() }, [loadSessions])
+  // ── Clear entire cache when app returns to foreground so all weeks get
+  //    fresh data on next access (covers teacher/co-parent changes) ──────────
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState !== 'visible') return
+      sessionCache.clear()
+      setRefreshCounter(c => c + 1)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
+  // ── Cache-aware week loading ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!uid) return
+    let active = true
+
+    const currentKey = weekStart.toISOString()
+    const nwStart    = addWeeks(weekStart, 1)
+    const existing   = sessionCache.get(weekStart)
+
+    function applyEntry(entry: WeekCacheEntry) {
+      if (!active) return
+      setSessions(entry.sessions)
+      setConflictMap(entry.conflictMap)
+    }
+
+    function applyNextWeek() {
+      if (!active) return
+      const nextEntry = sessionCache.get(nwStart)
+      setNextWeekStart(nextEntry ? nwStart : null)
+      setNextWeekSessions(nextEntry?.sessions ?? [])
+    }
+
+    if (existing && !sessionCache.isStale(existing)) {
+      // Fresh cache hit — render immediately, no spinner
+      applyEntry(existing)
+      applyNextWeek()
+      setLoading(false)
+    } else if (existing) {
+      // Stale — show current data immediately, refresh in background
+      applyEntry(existing)
+      applyNextWeek()
+      setLoading(false)
+      fetchAndCache(weekStart, uid).then(fresh => {
+        if (weekStartRef.current.toISOString() === currentKey) applyEntry(fresh)
+      }).catch(console.error)
+    } else {
+      // Cache miss — show spinner, fetch, then render
+      setLoading(true)
+      fetchAndCache(weekStart, uid).then(fresh => {
+        if (!active) return
+        applyEntry(fresh)
+        applyNextWeek()
+        setLoading(false)
+      }).catch(err => {
+        console.error(err)
+        if (active) setLoading(false)
+      })
+    }
+
+    // Prefetch W-1, W+1, W+2 in background
+    const nwKey = nwStart.toISOString()
+    ;[subWeeks(weekStart, 1), nwStart, addWeeks(weekStart, 2)].forEach(target => {
+      const tKey = target.toISOString()
+      if (prefetchingRef.current.has(tKey)) return
+      const cached = sessionCache.get(target)
+      if (cached && !sessionCache.isStale(cached)) return
+
+      prefetchingRef.current.add(tKey)
+      fetchAndCache(target, uid)
+        .then(entry => {
+          // When W+1 prefetch lands, populate "Coming up" if still on same week
+          if (tKey === nwKey && weekStartRef.current.toISOString() === currentKey) {
+            setNextWeekStart(target)
+            setNextWeekSessions(entry.sessions)
+          }
+        })
+        .catch(console.error)
+        .finally(() => prefetchingRef.current.delete(tKey))
+    })
+
+    return () => { active = false }
+  }, [weekStart, uid, refreshCounter])
+
+  // ── Pull-to-refresh: non-passive listener to allow preventDefault ─────────
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    function onTouchMove(e: TouchEvent) {
+      if (pullStartY.current === null) return
+      if (e.touches[0].clientY > pullStartY.current) e.preventDefault()
+    }
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    return () => el.removeEventListener('touchmove', onTouchMove)
+  }, [])
+
+  function onFeedTouchStart(e: React.TouchEvent) {
+    if (scrollRef.current?.scrollTop === 0) {
+      pullStartY.current = e.touches[0].clientY
+    }
+  }
+  function onFeedTouchMove(e: React.TouchEvent) {
+    if (pullStartY.current === null) return
+    const dist = e.touches[0].clientY - pullStartY.current
+    if (dist > 0) setPullDist(dist)
+  }
+  function onFeedTouchEnd() {
+    if (pullStartY.current === null) return
+    const triggered = pullDist >= PULL_THRESHOLD
+    pullStartY.current = null
+    setPullDist(0)
+    if (triggered) {
+      sessionCache.clear()
+      setRefreshCounter(c => c + 1)
+    }
+  }
+  function onFeedTouchCancel() {
+    pullStartY.current = null
+    setPullDist(0)
+  }
 
   // ── Strip snap + scroll reset on week change ──────────────────────────────
   useLayoutEffect(() => {
@@ -572,6 +690,12 @@ export function CalendarPage() {
   }, [weekStart])
 
   // ── Derived ───────────────────────────────────────────────────────────────
+  // Cache holds all sessions; child filter is applied client-side so one cache
+  // entry covers all filter states and switching is instant.
+  const displaySessions = selectedChildId
+    ? sessions.filter(s => s.child_id === selectedChildId)
+    : sessions
+
   function dotColorsForDay(day: Date): string[] {
     const daySessions = sessions.filter(s => isSameDay(parseISO(s.starts_at), day))
     return [...new Set(daySessions.map(s => s.child_id))].map(id => {
@@ -582,7 +706,7 @@ export function CalendarPage() {
 
   const weekGroups = weekDays.map(day => {
     const key = format(day, 'yyyy-MM-dd')
-    const daySessions = sessions
+    const daySessions = displaySessions
       .filter(s => isSameDay(parseISO(s.starts_at), day))
       .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
     return { day, key, sessions: daySessions }
@@ -804,14 +928,35 @@ export function CalendarPage() {
       </div>
 
       {/* Session feed */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto pb-4"
+        onTouchStart={onFeedTouchStart}
+        onTouchMove={onFeedTouchMove}
+        onTouchEnd={onFeedTouchEnd}
+        onTouchCancel={onFeedTouchCancel}
+      >
+        {/* Pull-to-refresh indicator */}
+        {pullDist > 0 && (
+          <div className="flex items-center justify-center" style={{ height: Math.min(pullDist * 0.5, 36), overflow: 'hidden' }}>
+            <i
+              className="ti ti-refresh"
+              style={{
+                fontSize: 16,
+                color: '#7C6EE6',
+                opacity: Math.min(pullDist / PULL_THRESHOLD, 1),
+                transform: `rotate(${Math.min((pullDist / PULL_THRESHOLD) * 180, 180)}deg)`,
+              }}
+            />
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center pt-10">
             <span className="text-[13px]" style={{ color: '#999AAA' }}>Loading…</span>
           </div>
         ) : (
           <>
-            {sessions.length === 0 ? (
+            {displaySessions.length === 0 ? (
               <div className="flex flex-col items-center pt-12 text-center px-8">
                 <i className="ti ti-calendar-off" style={{ fontSize: 32, color: '#D8D8DC' }} />
                 <p className="text-[13px] mt-3" style={{ color: '#999AAA' }}>No sessions this week.</p>
@@ -930,7 +1075,8 @@ export function CalendarPage() {
           onClose={() => setSelectedSession(null)}
           onSaved={() => {
             setSelectedSession(null)
-            loadSessions()
+            sessionCache.invalidate(weekStart)
+            setRefreshCounter(c => c + 1)
           }}
         />
       )}

@@ -15,6 +15,7 @@ import {
   getLatestSessionDefaults,
   getSessionsForDateAndTeacher,
 } from '../lib/db/sessions'
+import { invalidateWeekOf } from '../lib/sessionCache'
 import {
   getChildColor, CHILD_COLOR_HEX, CHILD_COLOR_BG, getInitials,
 } from '../types'
@@ -333,6 +334,7 @@ export function LogPage() {
           start_date:       format(selectedDate, 'yyyy-MM-dd'),
           end_date:         computedEndDate,
         })
+        invalidateWeekOf(selectedDate)
       } else {
         await createOneOffSession(uid, {
           child_id:   selectedChildId!,
@@ -342,6 +344,7 @@ export function LogPage() {
           ends_at:    sessionEnd!.toISOString(),
           price:      parsedPrice,
         })
+        invalidateWeekOf(sessionStart!)
       }
       navigate('/', { replace: true })
     } catch (err) {
