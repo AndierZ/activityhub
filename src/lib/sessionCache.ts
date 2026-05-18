@@ -1,4 +1,4 @@
-import type { Session } from '../../types'
+import type { Session } from '../types'
 import { startOfWeek } from 'date-fns'
 
 export const STALE_MS = 5 * 60 * 1000   // 5 minutes
