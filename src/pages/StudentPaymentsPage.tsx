@@ -508,10 +508,11 @@ export function StudentPaymentsPage() {
           )}
 
           {!loading && balances.length === 0 && upcomingOnlyRows.length === 0 && (
-            <div className="flex flex-col items-center justify-center pt-12 text-center px-8">
+            <div className="flex flex-col items-center justify-center pt-16 text-center px-8">
               <i className="ti ti-credit-card" style={{ fontSize: 36, color: '#D8D8DC' }} />
-              <p className="text-sm mt-3" style={{ color: '#999AAA' }}>
-                No payment history yet. Log a session first to track what you owe.
+              <p className="text-[13px] mt-3" style={{ color: '#999AAA' }}>
+                No payment history yet.
+                <br />Log a session first to track what you owe.
               </p>
             </div>
           )}

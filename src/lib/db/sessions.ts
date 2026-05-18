@@ -179,6 +179,21 @@ export async function getNextSessions(
   return data ?? []
 }
 
+export async function getIncompleteSessions(
+  userId: string
+): Promise<Session[]> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select(`*, child:children(*), teacher:teachers(*)`)
+    .eq('user_id', userId)
+    .eq('status', 'scheduled')
+    .lte('starts_at', new Date().toISOString())
+    .order('starts_at', { ascending: true })
+
+  if (error) throw error
+  return data ?? []
+}
+
 // ─── Conflict detection ───────────────────────────────────────────────────────
 
 export async function checkConflict(
@@ -416,4 +431,3 @@ function generateSessionDates(
 
   return dates
 }
-

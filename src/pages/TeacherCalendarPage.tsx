@@ -228,6 +228,7 @@ export function TeacherCalendarPage() {
   const [sessions,  setSessions]  = useState<TeacherSessionRow[]>([])
   const [loading,   setLoading]   = useState(true)
   const [selected,  setSelected]  = useState<TeacherSessionRow | null>(null)
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null)
 
   // ── Display state (lags behind fetch so feed stays visible during load) ─────
   const [dispWeekStart,        setDispWeekStart]        = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }))
@@ -472,43 +473,85 @@ export function TeacherCalendarPage() {
   function dayHasUnconfirmed(day: Date) { return sessions.some(s => isSameDay(parseISO(s.starts_at), day) && !s.teacher_confirmed_at) }
 
   // ── Feed groups ──────────────────────────────────────────────────────────────
+  const studentOptions = Array.from(
+    new Map(sessions.map(s => [s.child.id, s.child])).values()
+  ).sort((a, b) => a.name.localeCompare(b.name))
+  const displayDispSessions = selectedStudentId
+    ? dispSessions.filter(s => s.child.id === selectedStudentId)
+    : dispSessions
+
   const dispWeekGroups = eachDayOfInterval({
     start: dispWeekStart,
     end:   endOfWeek(dispWeekStart, { weekStartsOn: 0 }),
   })
     .map(day => ({
       day,
-      sessions: dispSessions
+      sessions: displayDispSessions
         .filter(s => isSameDay(parseISO(s.starts_at), day))
         .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
     }))
     .filter(g => g.sessions.length > 0)
 
-  const totalUnconfirmed = dispSessions.filter(s => !s.teacher_confirmed_at).length
+  const visibleUnconfirmedSessions = displayDispSessions.filter(s => s.status !== 'completed' && !s.teacher_confirmed_at)
+  const totalUnconfirmed = visibleUnconfirmedSessions.length
   const conflictIds      = buildConflictIds([...dispSessions, ...dispNextWeekSessions])
+
+  function jumpToFirstUnconfirmed() {
+    const target = visibleUnconfirmedSessions[0]
+    if (!target) return
+    setSelected(target)
+  }
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 px-5 pt-4 pb-2" style={{ borderBottom: '0.5px solid #E8E8EC' }}>
+      <div className="flex-shrink-0 px-5 pt-4 pb-2">
         <div className="flex items-center justify-between">
           <div className="font-serif text-[22px] leading-tight" style={{ color: '#1A1A2E' }}>Calendar</div>
-          {!loading && totalUnconfirmed > 0 && (
-            <div
+          {totalUnconfirmed > 0 && (
+            <button
+              onClick={jumpToFirstUnconfirmed}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
               style={{ background: '#EEEBfd', color: '#7C6EE6' }}
             >
               <i className="ti ti-clock" style={{ fontSize: 13 }} />
               {totalUnconfirmed} to confirm
-            </div>
+            </button>
           )}
         </div>
-        {claimedTeacher && (
-          <div className="text-[12px] mt-0.5" style={{ color: '#999AAA' }}>
-            {claimedTeacher.name} · {claimedTeacher.subject}
-          </div>
-        )}
+      </div>
+
+      {/* Student filter tabs */}
+      <div className="flex gap-2 px-5 pb-2 pt-1">
+        <button
+          onClick={() => setSelectedStudentId(null)}
+          className="px-3 py-1 rounded-2xl text-xs font-medium transition-colors"
+          style={{
+            border:     selectedStudentId === null ? '0.5px solid #D8D8DC' : '0.5px solid #E8E8EC',
+            background: selectedStudentId === null ? '#F5F5F7' : 'transparent',
+            color:      selectedStudentId === null ? '#1A1A2E' : '#555566',
+          }}
+        >
+          Everyone
+        </button>
+        {studentOptions.map(student => {
+          const active = selectedStudentId === student.id
+          return (
+            <button
+              key={student.id}
+              onClick={() => setSelectedStudentId(student.id)}
+              className="px-3 py-1 rounded-2xl text-xs font-medium transition-colors"
+              style={{
+                border:     `0.5px solid ${active ? '#7C6EE6' : '#E8E8EC'}`,
+                background: active ? '#EEEBfd' : 'transparent',
+                color:      active ? '#7C6EE6' : '#555566',
+              }}
+            >
+              {student.name}
+            </button>
+          )
+        })}
       </div>
 
       {/* Week nav */}
@@ -541,20 +584,20 @@ export function TeacherCalendarPage() {
           onTouchEnd={onStripTouchEnd}
           onTouchCancel={onStripTouchCancel}
         >
-          <div ref={prevPanelRef} className="flex flex-shrink-0 px-4 pt-1 pb-2 gap-1">
+          <div ref={prevPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {prevWeekDays.map(day => (
               <div
                 key={day.toISOString()}
-                className="flex-1 flex flex-col items-center py-1.5 rounded-[10px]"
-                style={{ border: '1.5px solid transparent' }}
+                className="flex-1 flex flex-col items-center py-1.5 rounded-xl"
+                style={{ border: '0.5px solid transparent' }}
               >
-                <span className="text-[10px] font-medium" style={{ color: '#999AAA' }}>{format(day, 'EEE')[0]}</span>
-                <span className="text-[13px] font-semibold mt-0.5" style={{ color: '#555566' }}>{format(day, 'd')}</span>
-                <div className="h-2 mt-0.5" />
+                <span className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: '#999AAA' }}>{format(day, 'EEE')}</span>
+                <span className="text-sm mt-0.5" style={{ color: '#1A1A2E', fontWeight: 600 }}>{format(day, 'd')}</span>
+                <div className="h-2" />
               </div>
             ))}
           </div>
-          <div ref={currentPanelRef} className="flex flex-shrink-0 px-4 pt-1 pb-2 gap-1">
+          <div ref={currentPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {weekDays.map(day => {
               const today     = isToday(day)
               const hasSess   = dayHasSessions(day)
@@ -562,11 +605,11 @@ export function TeacherCalendarPage() {
               return (
                 <div
                   key={day.toISOString()}
-                  className="flex-1 flex flex-col items-center py-1.5 rounded-[10px]"
+                  className="flex-1 flex flex-col items-center py-1.5 rounded-xl"
                   style={{ border: today ? '1.5px solid #7C6EE6' : '1.5px solid transparent' }}
                 >
-                  <span className="text-[10px] font-medium" style={{ color: today ? '#7C6EE6' : '#999AAA' }}>{format(day, 'EEE')[0]}</span>
-                  <span className="text-[13px] font-semibold mt-0.5" style={{ color: today ? '#7C6EE6' : '#555566' }}>{format(day, 'd')}</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: today ? '#7C6EE6' : '#999AAA' }}>{format(day, 'EEE')}</span>
+                  <span className="text-sm mt-0.5" style={{ color: today ? '#7C6EE6' : '#1A1A2E', fontWeight: today ? 700 : 600 }}>{format(day, 'd')}</span>
                   <div className="h-2 mt-0.5 flex items-center justify-center">
                     {hasSess && <div className="w-1.5 h-1.5 rounded-full" style={{ background: hasUnconf ? '#7C6EE6' : '#26B99A' }} />}
                   </div>
@@ -574,18 +617,18 @@ export function TeacherCalendarPage() {
               )
             })}
           </div>
-          <div ref={nextPanelRef} className="flex flex-shrink-0 px-4 pt-1 pb-2 gap-1">
+          <div ref={nextPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {nextWeekDays.map(day => {
               const hasSess   = dispNextWeekSessions.some(s => isSameDay(parseISO(s.starts_at), day))
               const hasUnconf = dispNextWeekSessions.some(s => isSameDay(parseISO(s.starts_at), day) && !s.teacher_confirmed_at)
               return (
                 <div
                   key={day.toISOString()}
-                  className="flex-1 flex flex-col items-center py-1.5 rounded-[10px]"
-                  style={{ border: '1.5px solid transparent' }}
+                  className="flex-1 flex flex-col items-center py-1.5 rounded-xl"
+                  style={{ border: '0.5px solid transparent' }}
                 >
-                  <span className="text-[10px] font-medium" style={{ color: '#999AAA' }}>{format(day, 'EEE')[0]}</span>
-                  <span className="text-[13px] font-semibold mt-0.5" style={{ color: '#555566' }}>{format(day, 'd')}</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: '#999AAA' }}>{format(day, 'EEE')}</span>
+                  <span className="text-sm mt-0.5" style={{ color: '#1A1A2E', fontWeight: 600 }}>{format(day, 'd')}</span>
                   <div className="h-2 mt-0.5 flex items-center justify-center">
                     {hasSess && <div className="w-1.5 h-1.5 rounded-full" style={{ background: hasUnconf ? '#7C6EE6' : '#26B99A' }} />}
                   </div>

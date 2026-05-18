@@ -10,6 +10,7 @@ import { getChildren } from '../lib/db/children'
 import {
   getSessionsForWeek,
   checkConflict,
+  getIncompleteSessions,
   completeSession,
   uncompleteSession,
   deleteSession,
@@ -513,6 +514,7 @@ export function StudentCalendarPage() {
   const [nextWeekSessions, setNextWeekSessions] = useState<Session[]>([])
   const [nextWeekStart, setNextWeekStart]       = useState<Date | null>(null)
   const [refreshCounter, setRefreshCounter]     = useState(0)
+  const [incompleteSessions, setIncompleteSessions] = useState<Session[]>([])
 
   const scrollRef       = useRef<HTMLDivElement>(null)
   const dayRefs         = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -551,6 +553,11 @@ export function StudentCalendarPage() {
     if (!user) return
     getChildren(uid).then(setChildren).catch(console.error)
   }, [user])
+
+  useEffect(() => {
+    if (!uid) return
+    getIncompleteSessions(uid).then(setIncompleteSessions).catch(console.error)
+  }, [uid, refreshCounter])
 
   // ── Keep weekStartRef in sync for use inside async callbacks ─────────────
   useEffect(() => { weekStartRef.current = weekStart }, [weekStart])
@@ -738,6 +745,10 @@ export function StudentCalendarPage() {
   const displaySessions = selectedChildId
     ? sessions.filter(s => s.child_id === selectedChildId)
     : sessions
+  const visibleIncompleteSessions = selectedChildId
+    ? incompleteSessions.filter(s => s.child_id === selectedChildId)
+    : incompleteSessions
+  const totalIncomplete = visibleIncompleteSessions.length
 
   function dotColorsForDay(day: Date): string[] {
     const daySessions = sessions.filter(s => isSameDay(parseISO(s.starts_at), day))
@@ -818,6 +829,13 @@ export function StudentCalendarPage() {
     }, 300)
   }
 
+  function jumpToFirstIncomplete() {
+    const target = visibleIncompleteSessions[0]
+    if (!target) return
+    const targetWeek = startOfWeek(parseISO(target.starts_at), { weekStartsOn: 0 })
+    jumpToWeek(targetWeek)
+  }
+
   function navigateWeek(dir: 'prev' | 'next') {
     if (isAnimating.current) return
     isAnimating.current = true
@@ -891,17 +909,20 @@ export function StudentCalendarPage() {
     <div className="flex flex-col h-full overflow-hidden">
 
       {/* Header */}
-      <div className="px-5 pt-3 pb-2 flex items-center justify-between">
+      <div className="px-5 pt-4 pb-2 flex items-center justify-between">
         <div className="font-serif text-[22px] leading-tight" style={{ color: '#1A1A2E' }}>
-          This week
+          Calendar
         </div>
-        <button
-          onClick={() => navigate('/profile')}
-          className="w-8 h-8 rounded-[10px] flex items-center justify-center"
-          style={{ border: '0.5px solid #E8E8EC' }}
-        >
-          <i className="ti ti-user text-[15px]" style={{ color: '#555566' }} />
-        </button>
+        {totalIncomplete > 0 && (
+          <button
+            onClick={jumpToFirstIncomplete}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold"
+            style={{ background: '#EEEBfd', color: '#7C6EE6' }}
+          >
+            <i className="ti ti-circle-check" style={{ fontSize: 13 }} />
+            {totalIncomplete} to complete
+          </button>
+        )}
       </div>
 
       {/* Child filter tabs */}
@@ -1047,8 +1068,8 @@ export function StudentCalendarPage() {
             </div>
           )}
           {loading ? (
-            <div className="flex items-center justify-center pt-10">
-              <span className="text-[13px]" style={{ color: '#999AAA' }}>Loading…</span>
+            <div className="flex justify-center pt-10">
+              <div className="w-7 h-7 border-2 rounded-full animate-spin" style={{ borderColor: '#EEEBfd', borderTopColor: '#7C6EE6' }} />
             </div>
           ) : (
             <>
