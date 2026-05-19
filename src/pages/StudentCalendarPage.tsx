@@ -918,10 +918,16 @@ export function StudentCalendarPage() {
   async function handleCardComplete(session: Session) {
     try {
       await completeSession(session.id)
-      setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'completed' } : s))
+      const patchSession = (s: Session) => s.id === session.id ? { ...s, status: 'completed' as const } : s
+      const sessionWeek = startOfWeek(parseISO(session.starts_at), { weekStartsOn: 0 })
+
+      setSessions(prev => prev.map(patchSession))
+      setNextWeekSessions(prev => prev.map(patchSession))
       setIncompleteSessions(prev => prev.filter(s => s.id !== session.id))
-      sessionCache.invalidate(weekStart)
-      setRefreshCounter(c => c + 1)
+      sessionCache.invalidate(sessionWeek)
+      if (sessionWeek.toISOString() === weekStart.toISOString()) {
+        setRefreshCounter(c => c + 1)
+      }
     } catch (err) {
       console.error(err)
     }
@@ -1216,7 +1222,13 @@ export function StudentCalendarPage() {
                           <div className="px-5 py-2">
                             {daySessions.map(s => (
                               <div key={s.id} style={{ opacity: 0.5 }}>
-                                <SessionBlock session={s} allChildren={children} hasConflict={false} onSelect={() => jumpToWeek(nextWeekStart!)} />
+                                <SessionBlock
+                                  session={s}
+                                  allChildren={children}
+                                  hasConflict={false}
+                                  onSelect={() => jumpToWeek(nextWeekStart!)}
+                                  onComplete={handleCardComplete}
+                                />
                               </div>
                             ))}
                           </div>
