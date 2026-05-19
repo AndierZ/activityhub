@@ -263,7 +263,7 @@ export function TeacherCalendarPage() {
   const prevPanelRef    = useRef<HTMLDivElement>(null)
   const currentPanelRef = useRef<HTMLDivElement>(null)
   const nextPanelRef    = useRef<HTMLDivElement>(null)
-  const touchStartY     = useRef<number | null>(null)
+  const touchStartX     = useRef<number | null>(null)
   const didSwipe        = useRef(false)
   const isAnimating     = useRef(false)
   const feedWrapperRef  = useRef<HTMLDivElement>(null)
@@ -308,7 +308,7 @@ export function TeacherCalendarPage() {
   // ── Strip snap + panel opacity reset on week change ──────────────────────────
   useLayoutEffect(() => {
     const strip = stripRef.current
-    if (strip) { strip.style.transition = 'none'; strip.style.transform = 'translateY(-33.333%)' }
+    if (strip) { strip.style.transition = 'none'; strip.style.transform = 'translateX(-100%)' }
     for (const [ref, opacity] of [
       [prevPanelRef, '0.5'],
       [currentPanelRef, '1'],
@@ -389,7 +389,7 @@ export function TeacherCalendarPage() {
     const strip = stripRef.current
     if (strip) {
       strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-      strip.style.transform  = dir === 'prev' ? 'translateY(0%)' : 'translateY(-66.666%)'
+      strip.style.transform  = dir === 'prev' ? 'translateX(0%)' : 'translateX(-200%)'
     }
     setTimeout(() => {
       isAnimating.current = false
@@ -407,7 +407,7 @@ export function TeacherCalendarPage() {
     const strip = stripRef.current
     if (strip) {
       strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-      strip.style.transform  = dir === 'prev' ? 'translateY(0%)' : 'translateY(-66.666%)'
+      strip.style.transform  = dir === 'prev' ? 'translateX(0%)' : 'translateX(-200%)'
     }
     setTimeout(() => {
       isAnimating.current = false
@@ -416,39 +416,39 @@ export function TeacherCalendarPage() {
     }, 300)
   }
 
-  // ── Touch handlers (vertical: swipe up = next, swipe down = prev) ────────────
+  // ── Touch handlers (horizontal: swipe left = next, right = prev) ─────────────
   function onStripTouchStart(e: React.TouchEvent) {
     if (isAnimating.current) return
-    touchStartY.current = e.touches[0].clientY
+    touchStartX.current = e.touches[0].clientX
     didSwipe.current    = false
   }
   function onStripTouchMove(e: React.TouchEvent) {
-    if (touchStartY.current === null || isAnimating.current) return
-    const delta = e.touches[0].clientY - touchStartY.current
+    if (touchStartX.current === null || isAnimating.current) return
+    const delta = e.touches[0].clientX - touchStartX.current
     const strip = stripRef.current
     if (!strip) return
     strip.style.transition = 'none'
-    strip.style.transform  = `translateY(calc(-33.333% + ${delta}px))`
+    strip.style.transform  = `translateX(calc(-100% + ${delta}px))`
   }
   function onStripTouchEnd(e: React.TouchEvent) {
-    if (touchStartY.current === null) return
-    const delta = e.changedTouches[0].clientY - touchStartY.current
-    touchStartY.current = null
+    if (touchStartX.current === null) return
+    const delta = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
     if (Math.abs(delta) > 50 && !isAnimating.current) {
       didSwipe.current = true
       navigateWeek(delta > 0 ? 'prev' : 'next')
     } else {
       if (Math.abs(delta) > 10) didSwipe.current = true
       const strip = stripRef.current
-      if (strip) { strip.style.transition = 'transform 180ms ease-out'; strip.style.transform = 'translateY(-33.333%)' }
+      if (strip) { strip.style.transition = 'transform 180ms ease-out'; strip.style.transform = 'translateX(-100%)' }
     }
   }
   function onStripTouchCancel() {
-    touchStartY.current = null
+    touchStartX.current = null
     const strip = stripRef.current
     if (!strip) return
     strip.style.transition = 'transform 180ms ease-out'
-    strip.style.transform  = 'translateY(-33.333%)'
+    strip.style.transform  = 'translateX(-100%)'
   }
 
   // ── Confirm / unconfirm (optimistic) ─────────────────────────────────────────
@@ -593,18 +593,18 @@ export function TeacherCalendarPage() {
         </button>
       </div>
 
-      {/* Week strip — 3-panel vertical carousel */}
+      {/* Week strip — 3-panel horizontal carousel */}
       <div className="flex-shrink-0 overflow-hidden" style={{ borderBottom: '0.5px solid #E8E8EC', height: stripHeight }}>
         <div
           ref={stripRef}
-          className="flex flex-col"
+          className="flex"
           style={{ willChange: 'transform' }}
           onTouchStart={onStripTouchStart}
           onTouchMove={onStripTouchMove}
           onTouchEnd={onStripTouchEnd}
           onTouchCancel={onStripTouchCancel}
         >
-          <div ref={prevPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
+          <div ref={prevPanelRef} className="w-full flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {prevWeekDays.map(day => (
               <div
                 key={day.toISOString()}
@@ -617,7 +617,7 @@ export function TeacherCalendarPage() {
               </div>
             ))}
           </div>
-          <div ref={currentPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
+          <div ref={currentPanelRef} className="w-full flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {weekDays.map(day => {
               const today     = isToday(day)
               const hasSess   = dayHasSessions(day)
@@ -637,7 +637,7 @@ export function TeacherCalendarPage() {
               )
             })}
           </div>
-          <div ref={nextPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
+          <div ref={nextPanelRef} className="w-full flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {nextWeekDays.map(day => {
               const hasSess   = dispNextWeekSessions.some(s => isSameDay(parseISO(s.starts_at), day))
               const hasUnconf = dispNextWeekSessions.some(s => isSameDay(parseISO(s.starts_at), day) && !s.teacher_confirmed_at)

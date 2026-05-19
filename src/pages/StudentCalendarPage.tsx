@@ -569,7 +569,7 @@ export function StudentCalendarPage() {
   const prevPanelRef    = useRef<HTMLDivElement>(null)
   const currentPanelRef = useRef<HTMLDivElement>(null)
   const nextPanelRef    = useRef<HTMLDivElement>(null)
-  const touchStartY     = useRef<number | null>(null)
+  const touchStartX     = useRef<number | null>(null)
   const didSwipe        = useRef(false)
   const isAnimating     = useRef(false)
   const weekStartRef    = useRef(weekStart)
@@ -744,7 +744,7 @@ export function StudentCalendarPage() {
     const strip = stripRef.current
     if (strip) {
       strip.style.transition = 'none'
-      strip.style.transform  = 'translateY(-33.333%)'
+      strip.style.transform  = 'translateX(-100%)'
     }
     if (scrollRef.current) scrollRef.current.scrollTop = 0
     // Reset strip panel opacities (no transition — happens before paint)
@@ -780,7 +780,7 @@ export function StudentCalendarPage() {
     return () => cancelAnimationFrame(rAF)
   }, [weekStart])
 
-  // Measure strip panel height once on mount so vertical carousel clips correctly
+  // Measure strip panel height once on mount so the carousel clips correctly
   useLayoutEffect(() => {
     const panel = currentPanelRef.current
     if (panel) setStripHeight(panel.offsetHeight)
@@ -866,7 +866,7 @@ export function StudentCalendarPage() {
     const strip = stripRef.current
     if (strip) {
       strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-      strip.style.transform  = dir === 'prev' ? 'translateY(0%)' : 'translateY(-66.666%)'
+      strip.style.transform  = dir === 'prev' ? 'translateX(0%)' : 'translateX(-200%)'
     }
     setTimeout(() => {
       isAnimating.current = false
@@ -893,7 +893,7 @@ export function StudentCalendarPage() {
     const strip = stripRef.current
     if (strip) {
       strip.style.transition = 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-      strip.style.transform  = dir === 'prev' ? 'translateY(0%)' : 'translateY(-66.666%)'
+      strip.style.transform  = dir === 'prev' ? 'translateX(0%)' : 'translateX(-200%)'
     }
     setTimeout(() => {
       isAnimating.current = false
@@ -933,23 +933,23 @@ export function StudentCalendarPage() {
     }
   }
 
-  // ── Swipe on week strip (vertical: swipe up = next, swipe down = prev) ───
+  // ── Swipe on week strip (horizontal: swipe left = next, right = prev) ────
   function onStripTouchStart(e: React.TouchEvent) {
-    touchStartY.current = e.touches[0].clientY
+    touchStartX.current = e.touches[0].clientX
     didSwipe.current    = false
   }
   function onStripTouchMove(e: React.TouchEvent) {
-    if (touchStartY.current === null) return
-    const delta = e.touches[0].clientY - touchStartY.current
+    if (touchStartX.current === null) return
+    const delta = e.touches[0].clientX - touchStartX.current
     const strip = stripRef.current
     if (!strip) return
     strip.style.transition = 'none'
-    strip.style.transform  = `translateY(calc(-33.333% + ${delta}px))`
+    strip.style.transform  = `translateX(calc(-100% + ${delta}px))`
   }
   function onStripTouchEnd(e: React.TouchEvent) {
-    if (touchStartY.current === null) return
-    const delta = e.changedTouches[0].clientY - touchStartY.current
-    touchStartY.current = null
+    if (touchStartX.current === null) return
+    const delta = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
     if (Math.abs(delta) > 50 && !isAnimating.current) {
       didSwipe.current = true
       navigateWeek(delta > 0 ? 'prev' : 'next')
@@ -958,16 +958,16 @@ export function StudentCalendarPage() {
       const strip = stripRef.current
       if (strip) {
         strip.style.transition = 'transform 180ms ease-out'
-        strip.style.transform  = 'translateY(-33.333%)'
+        strip.style.transform  = 'translateX(-100%)'
       }
     }
   }
   function onStripTouchCancel() {
-    touchStartY.current = null
+    touchStartX.current = null
     const strip = stripRef.current
     if (!strip) return
     strip.style.transition = 'transform 180ms ease-out'
-    strip.style.transform  = 'translateY(-33.333%)'
+    strip.style.transform  = 'translateX(-100%)'
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1037,18 +1037,18 @@ export function StudentCalendarPage() {
         </button>
       </div>
 
-      {/* Week strip — 3-panel vertical carousel (swipe up = next, swipe down = prev) */}
+      {/* Week strip — 3-panel horizontal carousel */}
       <div className="overflow-hidden" style={{ height: stripHeight }}>
         <div
           ref={stripRef}
-          className="flex flex-col"
+          className="flex"
           style={{ willChange: 'transform' }}
           onTouchStart={onStripTouchStart}
           onTouchMove={onStripTouchMove}
           onTouchEnd={onStripTouchEnd}
           onTouchCancel={onStripTouchCancel}
         >
-          <div ref={prevPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
+          <div ref={prevPanelRef} className="w-full flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {prevWeekDays.map(day => (
               <div key={day.toISOString()} className="flex-1 flex flex-col items-center py-1.5 rounded-xl" style={{ border: '0.5px solid transparent' }}>
                 <span className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: '#999AAA' }}>{format(day, 'EEE')}</span>
@@ -1057,7 +1057,7 @@ export function StudentCalendarPage() {
               </div>
             ))}
           </div>
-          <div ref={currentPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
+          <div ref={currentPanelRef} className="w-full flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {weekDays.map(day => {
               const selected  = isSameDay(day, selectedDate)
               const today     = isToday(day)
@@ -1085,7 +1085,7 @@ export function StudentCalendarPage() {
               )
             })}
           </div>
-          <div ref={nextPanelRef} className="flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
+          <div ref={nextPanelRef} className="w-full flex flex-shrink-0 px-3.5 pt-1 pb-2 gap-0.5">
             {nextWeekDays.map(day => {
               const dotColors = [...new Set(
                 nextWeekSessions
