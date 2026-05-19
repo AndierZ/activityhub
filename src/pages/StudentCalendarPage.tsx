@@ -792,6 +792,9 @@ export function StudentCalendarPage() {
   const displaySessions = selectedChildId
     ? sessions.filter(s => s.child_id === selectedChildId)
     : sessions
+  const displayNextWeekSessions = selectedChildId
+    ? nextWeekSessions.filter(s => s.child_id === selectedChildId)
+    : nextWeekSessions
   const visibleIncompleteSessions = selectedChildId
     ? incompleteSessions.filter(s => s.child_id === selectedChildId)
     : incompleteSessions
@@ -1194,7 +1197,7 @@ export function StudentCalendarPage() {
                 const dayGroups = eachDayOfInterval({ start: nextWeekStart, end: nwEnd })
                   .map(day => ({
                     day,
-                    sessions: nextWeekSessions
+                    sessions: displayNextWeekSessions
                       .filter(s => isSameDay(parseISO(s.starts_at), day))
                       .sort(compareSessions),
                   }))

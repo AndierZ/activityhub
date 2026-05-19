@@ -499,6 +499,9 @@ export function TeacherCalendarPage() {
   const displayDispSessions = selectedStudentId
     ? dispSessions.filter(s => s.child.id === selectedStudentId)
     : dispSessions
+  const displayDispNextWeekSessions = selectedStudentId
+    ? dispNextWeekSessions.filter(s => s.child.id === selectedStudentId)
+    : dispNextWeekSessions
 
   const dispWeekGroups = eachDayOfInterval({
     start: dispWeekStart,
@@ -713,7 +716,7 @@ export function TeacherCalendarPage() {
               const dayGroups = eachDayOfInterval({ start: dispNextWeekStart, end: nwEnd })
                 .map(day => ({
                   day,
-                  sessions: dispNextWeekSessions
+                  sessions: displayDispNextWeekSessions
                     .filter(s => isSameDay(parseISO(s.starts_at), day))
                     .sort(compareTeacherSessions),
                 }))
